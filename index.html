@@ -169,12 +169,14 @@ function nowTime(){ return new Date().toLocaleTimeString('pt-BR',{hour:'2-digit'
 
 /* ================= STORAGE ================= */
 async function safeGet(key, fallback){
-  try{ const r = await window.storage.get(key, true); return (r && r.value) ? JSON.parse(r.value) : fallback; }
-  catch(e){ return fallback; }
+  try{
+    const raw = localStorage.getItem(key);
+    return raw !== null ? JSON.parse(raw) : fallback;
+  }catch(e){ console.error('Erro ao ler', key, e); return fallback; }
 }
 async function saveKey(key, value){
-  try{ await window.storage.set(key, JSON.stringify(value), true); }
-  catch(e){ console.error('Erro ao salvar', key, e); }
+  try{ localStorage.setItem(key, JSON.stringify(value)); }
+  catch(e){ console.error('Erro ao salvar', key, e); alert('Não consegui salvar os dados no aparelho. Verifique o espaço de armazenamento do celular.'); }
 }
 async function savePlayers(){ await saveKey('players_pro', state.players); }
 async function saveSession(){ await saveKey('session_pro', state.session); }
