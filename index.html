@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Baba TBT</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101317">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Baba TBT">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
+  --green:#2E7D32; --green-light:#4CAF50; --white:#F5F6F7; --gray:#8A8F98; --gray-dim:#565B63;
+  --gold:#E4B93B; --danger:#E5484D;
+  --tier-bronze:#A0522D; --tier-prata:#B0B7BD; --tier-ouro:#E4B93B; --tier-platina:#5FC9BE; --tier-diamante:#6FB3F2; --tier-elite:#8B5CF6;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg); font-family:'Inter',sans-serif; color:var(--white); min-height:100vh; display:flex; justify-content:center;}
+#shell{width:100%; max-width:460px; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+header{
+  padding:18px 18px 12px; display:flex; align-items:center; gap:10px; justify-content:space-between;
+  position:sticky; top:0; background:linear-gradient(180deg, var(--bg) 75%, transparent); z-index:6; border-bottom:1px solid var(--line);
+}
+.brand{display:flex; align-items:center; gap:10px; min-width:0;}
+.logo{width:34px; height:34px; border-radius:9px; background:linear-gradient(160deg,var(--green-light),var(--green)); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;}
+header h1{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px; text-transform:uppercase; letter-spacing:0.6px; margin:0; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+header .sub{font-size:10.5px; color:var(--gray);}
+
+main{flex:1; padding:14px 16px 96px;}
+
+.eyebrow{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--green-light); margin:16px 0 8px; display:flex; align-items:center; justify-content:space-between;}
+.eyebrow small{font-family:'Inter',sans-serif; font-size:11px; color:var(--gray); text-transform:none; letter-spacing:0; font-weight:500;}
+
+.card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:10px;}
+.row{display:flex; align-items:center; gap:10px;}
+.between{justify-content:space-between;}
+
+.btn{font-family:'Inter',sans-serif; font-weight:700; font-size:13px; border:none; border-radius:11px; padding:11px 15px; cursor:pointer;}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:var(--green); color:#fff;}
+.btn-outline{background:transparent; border:1px solid var(--line); color:var(--white);}
+.btn-danger{background:rgba(229,72,77,0.15); color:var(--danger); border:1px solid rgba(229,72,77,0.35);}
+.btn-ghost{background:var(--card-2); color:var(--white);}
+.btn-sm{padding:7px 10px; font-size:12px; border-radius:9px;}
+.btn-block{width:100%;}
+.btn:disabled{opacity:0.35; cursor:not-allowed;}
+
+input[type=text], input[type=number], select{
+  font-family:'Inter',sans-serif; background:var(--card-2); border:1px solid var(--line); color:var(--white);
+  border-radius:10px; padding:10px 11px; font-size:13.5px; width:100%; outline:none;
+}
+input::placeholder{color:var(--gray-dim);}
+input:focus, select:focus{border-color:var(--green-light);}
+select option{color:#000;}
+label.lbl{font-size:11px; color:var(--gray); margin-bottom:4px; display:block; font-weight:600;}
+.field{margin-bottom:10px;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
+
+.overall-badge{width:42px; height:50px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-family:'Rajdhani',sans-serif; font-weight:700; flex-shrink:0; border:1.5px solid;
+  background:linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0));}
+.overall-badge .num{font-size:18px; line-height:1;}
+.overall-badge .tier{font-size:7.5px; letter-spacing:0.3px; text-transform:uppercase; margin-top:2px; opacity:0.85;}
+.tier-Bronze{border-color:var(--tier-bronze); color:var(--tier-bronze);}
+.tier-Prata{border-color:var(--tier-prata); color:var(--tier-prata);}
+.tier-Ouro{border-color:var(--tier-ouro); color:var(--tier-ouro);}
+.tier-Platina{border-color:var(--tier-platina); color:var(--tier-platina);}
+.tier-Diamante{border-color:var(--tier-diamante); color:var(--tier-diamante);}
+.tier-Elite{border-color:var(--tier-elite); color:var(--tier-elite);}
+
+.name{font-weight:700; font-size:14px;}
+.meta{font-size:11.5px; color:var(--gray);}
+
+.badge{font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap;}
+.badge-conf{background:rgba(76,175,80,0.16); color:var(--green-light);}
+.badge-wait{background:rgba(228,185,59,0.16); color:var(--gold);}
+.badge-guest{background:rgba(139,92,246,0.16); color:#a78bfa;}
+.badge-abs{background:rgba(229,72,77,0.14); color:var(--danger);}
+.badge-order{background:var(--green); color:#fff; font-family:'Rajdhani'; font-size:13px; min-width:22px; text-align:center;}
+
+.empty{text-align:center; padding:38px 14px; color:var(--gray);}
+.empty .icon{font-size:32px; display:block; margin-bottom:8px;}
+.empty .msg{font-size:13px; line-height:1.5;}
+
+nav#tabbar{
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:460px;
+  display:flex; background:rgba(16,19,23,0.95); backdrop-filter:blur(10px); border-top:1px solid var(--line);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom)); z-index:10;
+}
+nav#tabbar button{flex:1; background:none; border:none; color:var(--gray-dim); display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; border-radius:10px;}
+nav#tabbar button .ic{font-size:18px;}
+nav#tabbar button .lb{font-size:9px; font-weight:700;}
+nav#tabbar button.active{color:var(--green-light);}
+
+.segrow{display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;}
+.seg{flex:1; min-width:70px; text-align:center; padding:8px 4px; border-radius:9px; font-size:11.5px; font-weight:700; background:var(--card-2); border:1px solid var(--line); color:var(--gray); cursor:pointer;}
+.seg.on{background:var(--green); color:#fff; border-color:var(--green);}
+
+.scoreboard{background:radial-gradient(140% 100% at 50% -20%, #1b3a20 0%, #0d1610 70%); border:1px solid rgba(76,175,80,0.25); border-radius:16px; padding:18px 12px; margin-bottom:12px;}
+.sb-teams{display:flex; align-items:center; justify-content:space-between;}
+.sb-team{flex:1; text-align:center; min-width:0;}
+.sb-team .tname{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12.5px; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.sb-team .ovr{font-size:10px; color:var(--gray); margin-top:2px;}
+.sb-score{font-family:'Rajdhani',sans-serif; font-size:44px; font-weight:700; color:var(--white); font-variant-numeric:tabular-nums;}
+.sb-x{font-family:'Rajdhani',sans-serif; font-size:16px; color:var(--gray-dim); padding:0 6px;}
+
+.evrow{display:flex; align-items:center; gap:8px; font-size:12.5px; padding:7px 0; border-bottom:1px dashed var(--line);}
+.evrow:last-child{border-bottom:none;}
+
+table.rank{width:100%; border-collapse:collapse; font-size:12.5px;}
+table.rank th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.3px; color:var(--gray); padding:0 5px 7px; font-weight:700;}
+table.rank td{padding:7px 5px; border-top:1px solid var(--line);}
+table.rank td.num{font-family:'Rajdhani',sans-serif; font-size:15px; color:var(--green-light); text-align:center;}
+.pos{width:20px; height:20px; border-radius:6px; background:var(--card-2); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:var(--gray);}
+.pos.p1{background:var(--gold); color:#1a1305;} .pos.p2{background:#c8ccc8; color:#111;} .pos.p3{background:#c98a4e; color:#1b0f04;}
+
+.pillrow{display:flex; gap:8px; margin-bottom:10px;}
+.pill{flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 4px; text-align:center;}
+.pill .v{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:19px;}
+.pill .l{font-size:9px; color:var(--gray); text-transform:uppercase;}
+
+.divider{height:1px; background:var(--line); margin:14px 0;}
+</style>
+</head>
+<body>
+<div id="shell">
+  <header>
+    <div class="brand"><div class="logo"><img src="icon-192.png" alt="Escudo" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div><div><h1 id="groupName" onclick="renameGroup()">Baba TBT</h1><div class="sub" id="dateSub"></div></div></div>
+  </header>
+  <main id="view"><div class="empty"><span class="icon">⏳</span><div class="msg">Carregando dados...</div></div></main>
+  <nav id="tabbar">
+    <button data-t="elenco" onclick="setTab('elenco')"><span class="ic">👥</span><span class="lb">ELENCO</span></button>
+    <button data-t="chegada" onclick="setTab('chegada')"><span class="ic">🕐</span><span class="lb">CHEGADA</span></button>
+    <button data-t="sorteio" onclick="setTab('sorteio')"><span class="ic">🎲</span><span class="lb">SORTEIO</span></button>
+    <button data-t="partida" onclick="setTab('partida')"><span class="ic">🥅</span><span class="lb">PARTIDA</span></button>
+    <button data-t="ranking" onclick="setTab('ranking')"><span class="ic">🏆</span><span class="lb">RANKING</span></button>
+    <button data-t="financeiro" onclick="setTab('financeiro')"><span class="ic">💰</span><span class="lb">CAIXA</span></button>
+  </nav>
+</div>
+<input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)">
+
+<script>
+/* ================= STATE ================= */
+let state = {
+  players: [],
+  session: { date:'', checkins:[], teams:[], matches:[] },
+  settings: { groupName:'Baba TBT' },
+  loaded:false
+};
+let currentTab = 'elenco';
+
+function uid(){ return Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4); }
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function todayLabel(){ return new Date().toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'}); }
+function monthKey(){ return new Date().toISOString().slice(0,7); }
+function monthLabel(){ return new Date().toLocaleDateString('pt-BR',{month:'long', year:'numeric'}); }
+function nowTime(){ return new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+
+/* ================= STORAGE ================= */
+async function safeGet(key, fallback){
+  try{ const r = await window.storage.get(key, true); return (r && r.value) ? JSON.parse(r.value) : fallback; }
+  catch(e){ return fallback; }
+}
+async function saveKey(key, value){
+  try{ await window.storage.set(key, JSON.stringify(value), true); }
+  catch(e){ console.error('Erro ao salvar', key, e); }
+}
+async function savePlayers(){ await saveKey('players_pro', state.players); }
+async function saveSession(){ await saveKey('session_pro', state.session); }
+async function saveSettings(){ await saveKey('settings_pro', state.settings); }
+
+async function loadAll(){
+  const [players, session, settings] = await Promise.all([
+    safeGet('players_pro', []),
+    safeGet('session_pro', null),
+    safeGet('settings_pro', {groupName:'Baba TBT'})
+  ]);
+  state.players = players;
+  state.settings = settings;
+  if(session && session.date === todayKey()) state.session = session;
+  else { state.session = { date: todayKey(), checkins:[], teams:[], matches:[] }; await saveSession(); }
+  state.loaded = true;
+}
+
+/* ================= HELPERS ================= */
+function getPlayer(id){ return state.players.find(p=>p.id===id); }
+function isCheckedIn(id){ return state.session.checkins.some(c=>c.playerId===id); }
+function tierOf(level){
+  return {1:'Bronze', 2:'Prata', 3:'Ouro', 4:'Platina', 5:'Elite'}[level] || 'Bronze';
+}
+function overallBadge(p){
+  return `<div class="overall-badge tier-${tierOf(p.level)}"><div class="num">${p.level}</div><div class="tier">${tierOf(p.level)}</div></div>`;
+}
+function statusBadge(s){
+  return {confirmado:'<span class="badge badge-conf">Confirmado</span>', ausente:'<span class="badge badge-abs">Ausente</span>',
+    espera:'<span class="badge badge-wait">Lista de espera</span>'}[s] || '';
+}
+function escapeHtml(str){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+function teamColorName(i){ return ['Verde','Branco','Azul','Preto'][i%4]; }
+function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47'][i%4]; }
+
+/* ================= RENDER DISPATCH ================= */
+function setTab(tab){ currentTab = tab; document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===tab)); render(); }
+function render(){
+  document.getElementById('dateSub').textContent = todayLabel();
+  document.getElementById('groupName').textContent = state.settings.groupName;
+  const view = document.getElementById('view');
+  if(!state.loaded){ view.innerHTML = '<div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>'; return; }
+  if(currentTab==='elenco') view.innerHTML = renderElenco();
+  else if(currentTab==='chegada') view.innerHTML = renderChegada();
+  else if(currentTab==='sorteio') view.innerHTML = renderSorteio();
+  else if(currentTab==='partida') view.innerHTML = renderPartida();
+  else if(currentTab==='ranking') view.innerHTML = renderRanking();
+  else if(currentTab==='financeiro') view.innerHTML = renderFinanceiro();
+}
+function renameGroup(){
+  const n = prompt('Nome da pelada:', state.settings.groupName);
+  if(n && n.trim()){ state.settings.groupName = n.trim(); saveSettings(); render(); }
+}
+
+/* ================= ELENCO ================= */
+let elencoFilter = 'todos';
+let novoJogadorGuest = false;
+function renderElenco(){
+  let list = state.players.slice().sort((a,b)=>b.level-a.level);
+  if(elencoFilter==='confirmado'||elencoFilter==='ausente'||elencoFilter==='espera') list = list.filter(p=>p.status===elencoFilter);
+  if(elencoFilter==='convidados') list = list.filter(p=>p.guest);
+
+  let html = `<div class="eyebrow">Elenco <small>${state.players.length} jogador(es)</small></div>`;
+  html += `<div class="card">
+    <div class="field"><label class="lbl">Nome</label><input type="text" id="newName" placeholder="Nome do jogador"></div>
+    <div class="grid3">
+      <div class="field"><label class="lbl">Posição</label>
+        <select id="newPos"><option value="GOL">Goleiro</option><option value="ZAG">Zagueiro</option><option value="MEI" selected>Meio</option><option value="ATA">Atacante</option></select>
+      </div>
+      <div class="field"><label class="lbl">Nível (1 a 5)</label><input type="number" id="newLevel" value="3" min="1" max="5"></div>
+      <div class="field"><label class="lbl">Convidado?</label>
+        <select id="newGuest"><option value="0">Associado</option><option value="1">Convidado</option></select>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="addPlayer()">+ Adicionar jogador</button>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="row between">
+      <div>
+        <div class="name" style="font-size:13px;">📥 Importar do Excel</div>
+        <div class="meta">Coluna obrigatória: <b>Nome</b>. Opcionais: Posição (GOL/ZAG/MEI/ATA), Nível (1 a 5), Convidado (sim/não).</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('excelFile').click()">Escolher arquivo</button>
+    </div>
+  </div>`;
+
+  html += `<div class="segrow">
+    ${seg('todos','Todos')}${seg('confirmado','Confirmados')}${seg('espera','Espera')}${seg('ausente','Ausentes')}${seg('convidados','Convidados')}
+  </div>`;
+
+  if(list.length===0){
+    html += `<div class="empty"><span class="icon">👥</span><div class="msg">Nenhum jogador nesse filtro ainda.<br>Cadastre o elenco no formulário acima.</div></div>`;
+  } else {
+    list.forEach(p=>{
+      html += `<div class="card row between">
+        <div class="row">
+          ${overallBadge(p)}
+          <div>
+            <div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
+            <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0} 🟨${p.yellow||0} 🟥${p.red||0}</div>
+            <div style="margin-top:4px;">${statusBadge(p.status)}</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="editPlayer('${p.id}')">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="removePlayer('${p.id}')">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+  return html;
+}
+function seg(val,label){ return `<div class="seg ${elencoFilter===val?'on':''}" onclick="elencoFilter='${val}'; render();">${label}</div>`; }
+
+async function addPlayer(){
+  const name = document.getElementById('newName').value.trim();
+  if(!name){ document.getElementById('newName').focus(); return; }
+  const position = document.getElementById('newPos').value;
+  const level = Math.max(1, Math.min(5, parseInt(document.getElementById('newLevel').value)||3));
+  const guest = document.getElementById('newGuest').value==='1';
+  state.players.push({
+    id:uid(), name, position, level, guest, status:'espera',
+    goals:0, assists:0, yellow:0, red:0, matchesPlayed:0, wins:0, dues:[]
+  });
+  await savePlayers();
+  render();
+}
+async function editPlayer(id){
+  const p = getPlayer(id); if(!p) return;
+  const name = prompt('Nome:', p.name); if(name===null) return;
+  const position = (prompt('Posição (GOL, ZAG, MEI, ATA):', p.position) || p.position).toUpperCase();
+  const levelStr = prompt('Nível técnico (1 a 5):', p.level); if(levelStr===null) return;
+  const level = Math.max(1, Math.min(5, parseInt(levelStr)||p.level));
+  p.name = name.trim() || p.name;
+  p.position = ['GOL','ZAG','MEI','ATA'].includes(position) ? position : p.position;
+  p.level = level;
+  await savePlayers();
+  render();
+}
+function findCol(row, patterns){
+  const keys = Object.keys(row);
+  for(const pat of patterns){
+    const k = keys.find(k=>pat.test(k.trim()));
+    if(k) return k;
+  }
+  return null;
+}
+async function handleExcelImport(event){
+  const file = event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ alert('Não foi possível carregar o leitor de planilhas. Verifique sua conexão e tente novamente.'); return; }
+  try{
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    if(rows.length===0){ alert('Não encontrei nenhuma linha com dados na planilha.'); return; }
+
+    const nameKey = findCol(rows[0], [/^nome$/i, /name/i]);
+    if(!nameKey){ alert('Não encontrei uma coluna "Nome" na planilha. Verifique o cabeçalho da primeira linha.'); return; }
+
+    const posKey = findCol(rows[0], [/posi[cç][aã]o/i, /position/i]);
+    const levelKey = findCol(rows[0], [/n[ií]vel/i, /level/i]);
+    const guestKey = findCol(rows[0], [/convidado/i, /guest/i]);
+
+    const validPos = ['GOL','ZAG','MEI','ATA'];
+    const existingNames = new Set(state.players.map(p=>p.name.trim().toLowerCase()));
+    let added = 0, skippedEmpty = 0, skippedDup = 0;
+
+    rows.forEach(row=>{
+      const name = String(row[nameKey]||'').trim();
+      if(!name){ skippedEmpty++; return; }
+      if(existingNames.has(name.toLowerCase())){ skippedDup++; return; }
+
+      let position = 'MEI';
+      if(posKey){
+        const raw = String(row[posKey]||'').trim().toUpperCase().slice(0,3);
+        if(validPos.includes(raw)) position = raw;
+      }
+      let level = 3;
+      if(levelKey){
+        const n = parseInt(row[levelKey]);
+        if(!isNaN(n)) level = Math.max(1, Math.min(5, n));
+      }
+      let guest = false;
+      if(guestKey){
+        const raw = String(row[guestKey]||'').trim().toLowerCase();
+        guest = ['sim','yes','true','1','x'].includes(raw);
+      }
+
+      state.players.push({
+        id:uid(), name, position, level, guest, status:'espera',
+        goals:0, assists:0, yellow:0, red:0, matchesPlayed:0, wins:0, dues:[]
+      });
+      existingNames.add(name.toLowerCase());
+      added++;
+    });
+
+    await savePlayers();
+    render();
+    alert(`Importação concluída: ${added} jogador(es) adicionado(s).` +
+      (skippedDup>0 ? ` ${skippedDup} ignorado(s) por já existir(em) no elenco.` : '') +
+      (skippedEmpty>0 ? ` ${skippedEmpty} linha(s) ignorada(s) por não ter nome.` : ''));
+  }catch(e){
+    console.error(e);
+    alert('Não consegui ler esse arquivo. Confira se é um .xlsx, .xls ou .csv válido.');
+  }
+}
+async function removePlayer(id){
+  if(!confirm('Remover este jogador? O histórico de estatísticas dele será perdido.')) return;
+  state.players = state.players.filter(p=>p.id!==id);
+  state.session.checkins = state.session.checkins.filter(c=>c.playerId!==id);
+  await savePlayers(); await saveSession();
+  render();
+}
+
+/* ================= CHEGADA (confirmação + ordem) ================= */
+function renderChegada(){
+  const all = state.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const arrived = state.session.checkins.slice().sort((a,b)=>a.order-b.order);
+  const confirmedNotArrived = all.filter(p=>p.status==='confirmado' && !isCheckedIn(p.id));
+
+  let html = `<div class="eyebrow">Ordem de chegada <small>${arrived.length} presente(s)</small></div>`;
+  if(arrived.length>0){
+    html += `<div class="card">`;
+    arrived.forEach(c=>{
+      const p = getPlayer(c.playerId); if(!p) return;
+      html += `<div class="row between" style="padding:6px 0;">
+        <div class="row"><span class="badge badge-order">${c.order}</span>
+          <div><div class="name">${escapeHtml(p.name)}</div><div class="meta">chegou às ${c.time}</div></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="undoCheckin('${p.id}')">Desfazer</button>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="empty"><span class="icon">🕐</span><div class="msg">Ninguém chegou ainda hoje.</div></div>`;
+  }
+
+  html += `<div class="eyebrow">Confirmados aguardando chegada</div>`;
+  if(confirmedNotArrived.length===0){
+    html += `<div class="empty"><span class="icon">✅</span><div class="msg">Sem confirmados pendentes de check-in.</div></div>`;
+  } else {
+    confirmedNotArrived.forEach(p=>{
+      html += `<div class="card row between">
+        <div class="name">${escapeHtml(p.name)}</div>
+        <button class="btn btn-primary btn-sm" onclick="checkin('${p.id}')">Cheguei</button>
+      </div>`;
+    });
+  }
+
+  html += `<div class="eyebrow">Confirmação de presença</div>`;
+  if(all.length===0){
+    html += `<div class="empty"><span class="icon">👥</span><div class="msg">Cadastre jogadores na aba Elenco primeiro.</div></div>`;
+  } else {
+    all.forEach(p=>{
+      html += `<div class="card row between">
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="row" style="gap:4px;">
+          <button class="btn btn-sm ${p.status==='confirmado'?'btn-primary':'btn-outline'}" onclick="setStatus('${p.id}','confirmado')">Confirmar</button>
+          <button class="btn btn-sm ${p.status==='espera'?'btn-outline':'btn-outline'}" style="${p.status==='espera'?'border-color:var(--gold); color:var(--gold);':''}" onclick="setStatus('${p.id}','espera')">Espera</button>
+          <button class="btn btn-sm ${p.status==='ausente'?'btn-danger':'btn-outline'}" onclick="setStatus('${p.id}','ausente')">Ausente</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `<div class="divider"></div>
+    <button class="btn btn-outline btn-block" onclick="newPelada()">🔄 Iniciar nova pelada (zera chegada, times e partidas de hoje)</button>`;
+  return html;
+}
+async function setStatus(id, status){
+  const p = getPlayer(id); if(!p) return;
+  p.status = status;
+  if(status!=='confirmado') state.session.checkins = state.session.checkins.filter(c=>c.playerId!==id);
+  await savePlayers(); await saveSession();
+  render();
+}
+async function checkin(id){
+  const order = state.session.checkins.length + 1;
+  state.session.checkins.push({playerId:id, order, time:nowTime()});
+  await saveSession();
+  render();
+}
+async function undoCheckin(id){
+  state.session.checkins = state.session.checkins.filter(c=>c.playerId!==id);
+  state.session.checkins.sort((a,b)=>a.order-b.order).forEach((c,i)=>c.order=i+1);
+  await saveSession();
+  render();
+}
+async function newPelada(){
+  if(!confirm('Isso vai zerar a chegada, os times sorteados e as partidas de hoje (estatísticas continuam salvas). Continuar?')) return;
+  state.session = { date: todayKey(), checkins:[], teams:[], matches:[] };
+  await saveSession();
+  render();
+}
+
+/* ================= SORTEIO ================= */
+let sorteioNumTeams = 2;
+let sorteioMode = 'balanceado';
+function renderSorteio(){
+  const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
+  let html = `<div class="eyebrow">Sorteio de times <small>${presentes.length} presente(s)</small></div>`;
+  html += `<div class="card">
+    <label class="lbl">Número de times</label>
+    <div class="segrow">${[2,3,4].map(n=>`<div class="seg ${n===sorteioNumTeams?'on':''}" onclick="sorteioNumTeams=${n}; render();">${n} times</div>`).join('')}</div>
+    <label class="lbl">Modo</label>
+    <div class="segrow">
+      <div class="seg ${sorteioMode==='aleatorio'?'on':''}" onclick="sorteioMode='aleatorio'; render();">🎲 Aleatório</div>
+      <div class="seg ${sorteioMode==='balanceado'?'on':''}" onclick="sorteioMode='balanceado'; render();">⚖️ Balanceado</div>
+    </div>
+    ${sorteioMode==='balanceado' ? '<div class="meta" style="margin-bottom:10px;">Distribui goleiros um por time e equilibra o nível técnico total de cada equipe.</div>' : ''}
+    <button class="btn btn-primary btn-block" onclick="sortear()" ${presentes.length < sorteioNumTeams*2 ? 'disabled' : ''}>Sortear times</button>
+    ${presentes.length < sorteioNumTeams*2 ? `<div class="meta" style="margin-top:8px;">Marque a chegada de pelo menos ${sorteioNumTeams*2} jogadores.</div>` : ''}
+  </div>`;
+
+  if(state.session.teams.length>0){
+    html += `<div class="eyebrow" style="margin-top:14px;">Times sorteados</div>`;
+    state.session.teams.forEach((team,i)=>{
+      const avg = team.players.length ? Math.round(team.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0)/team.players.length) : 0;
+      html += `<div class="card">
+        <div class="row between" style="margin-bottom:8px;">
+          <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">Time ${teamColorName(i)}</span>
+          <span class="meta">nível médio ${avg}</span>
+        </div>`;
+      team.players.forEach(pid=>{
+        const p = getPlayer(pid); if(!p) return;
+        html += `<div class="row between" style="padding:4px 0;">
+          <div class="row">${overallBadge(p)}<div><div class="name">${escapeHtml(p.name)}</div><div class="meta">${p.position}</div></div></div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+  }
+  return html;
+}
+function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+async function sortear(){
+  const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
+  const n = sorteioNumTeams;
+  const teams = Array.from({length:n}, ()=>({players:[]}));
+
+  if(sorteioMode==='aleatorio'){
+    shuffle(presentes).forEach((p,i)=>teams[i%n].players.push(p.id));
+  } else {
+    const goleiros = shuffle(presentes.filter(p=>p.position==='GOL'));
+    const outros = shuffle(presentes.filter(p=>p.position!=='GOL')).sort((a,b)=>b.level-a.level);
+    goleiros.forEach((p,i)=>teams[i%n].players.push(p.id));
+    const sums = teams.map(t=>t.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0));
+    outros.forEach(p=>{
+      let best=0;
+      for(let i=1;i<n;i++){
+        if(sums[i]<sums[best] || (sums[i]===sums[best] && teams[i].players.length<teams[best].players.length)) best=i;
+      }
+      teams[best].players.push(p.id);
+      sums[best]+=p.level;
+    });
+  }
+  state.session.teams = teams;
+  state.session.matches = [];
+  await saveSession();
+  render();
+}
+
+/* ================= PARTIDA ================= */
+function renderPartida(){
+  const teams = state.session.teams;
+  let html = `<div class="eyebrow">Partida</div>`;
+  if(teams.length===0){
+    html += `<div class="empty"><span class="icon">🎲</span><div class="msg">Sorteie os times primeiro na aba Sorteio.</div></div>`;
+    return html;
+  }
+  const live = state.session.matches.find(m=>!m.finished);
+
+  if(!live){
+    html += `<div class="card">
+      <label class="lbl">Times da partida</label>
+      <div class="grid2" style="margin-bottom:10px;">
+        <select id="selTeamA">${teams.map((t,i)=>`<option value="${i}">Time ${teamColorName(i)}</option>`).join('')}</select>
+        <select id="selTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>Time ${teamColorName(i)}</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="startMatch()">Iniciar partida</button>
+    </div>`;
+  } else {
+    const avgA = avgLevel(live.teamA), avgB = avgLevel(live.teamB);
+    html += `<div class="scoreboard"><div class="sb-teams">
+      <div class="sb-team"><div class="tname">${teamColorName(live.teamA)}</div><div class="sb-score">${live.scoreA}</div><div class="ovr">nível ${avgA}</div></div>
+      <div class="sb-x">×</div>
+      <div class="sb-team"><div class="tname">${teamColorName(live.teamB)}</div><div class="sb-score">${live.scoreB}</div><div class="ovr">nível ${avgB}</div></div>
+    </div></div>`;
+
+    html += `<div class="grid2" style="margin-bottom:8px;">
+      <button class="btn btn-outline" onclick="openGoal('A')">⚽ Gol ${teamColorName(live.teamA)}</button>
+      <button class="btn btn-outline" onclick="openGoal('B')">⚽ Gol ${teamColorName(live.teamB)}</button>
+    </div>
+    <div class="grid2" style="margin-bottom:10px;">
+      <button class="btn btn-outline" onclick="openCard('A')">🟨🟥 Cartão ${teamColorName(live.teamA)}</button>
+      <button class="btn btn-outline" onclick="openCard('B')">🟨🟥 Cartão ${teamColorName(live.teamB)}</button>
+    </div>
+    <div id="matchAction"></div>
+    <div class="card">
+      <div class="meta" style="margin-bottom:6px;">Eventos da partida</div>
+      ${live.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' : live.events.slice().reverse().map(renderEventRow).join('')}
+    </div>
+    <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
+  }
+
+  const finished = state.session.matches.filter(m=>m.finished);
+  if(finished.length>0){
+    html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas hoje</div>`;
+    finished.forEach(m=>{
+      html += `<div class="card row between">
+        <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+        <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
+        <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+      </div>`;
+    });
+  }
+  return html;
+}
+function avgLevel(teamIdx){
+  const team = state.session.teams[teamIdx]; if(!team || team.players.length===0) return 0;
+  return Math.round(team.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0)/team.players.length);
+}
+function renderEventRow(ev){
+  const p = getPlayer(ev.playerId); const name = p?escapeHtml(p.name):'—';
+  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
+  const [icon,label] = map[ev.type] || ['•',name];
+  return `<div class="evrow"><span>${icon}</span><span>${label}</span></div>`;
+}
+async function startMatch(){
+  const a = parseInt(document.getElementById('selTeamA').value);
+  const b = parseInt(document.getElementById('selTeamB').value);
+  if(a===b){ alert('Escolha dois times diferentes.'); return; }
+  state.session.matches.push({id:uid(), teamA:a, teamB:b, scoreA:0, scoreB:0, events:[], finished:false, cardCounts:{}});
+  await saveSession(); render();
+}
+function getLiveMatch(){ return state.session.matches.find(m=>!m.finished); }
+function openGoal(side){
+  const m = getLiveMatch(); if(!m) return;
+  const teamIdx = side==='A'?m.teamA:m.teamB;
+  const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
+  document.getElementById('matchAction').innerHTML = `<div class="card">
+    <label class="lbl">Quem marcou o gol? (Time ${teamColorName(teamIdx)})</label>
+    <select id="scorerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <label class="lbl" style="margin-top:10px;">Assistência (opcional)</label>
+    <select id="assistSel"><option value="">Sem assistência</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmGoal('${side}')">Confirmar gol</button>
+      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+    </div></div>`;
+}
+async function confirmGoal(side){
+  const m = getLiveMatch(); if(!m) return;
+  const scorerId = document.getElementById('scorerSel').value;
+  const assistId = document.getElementById('assistSel').value;
+  if(side==='A') m.scoreA++; else m.scoreB++;
+  m.events.push({type:'goal', playerId:scorerId, side});
+  const scorer = getPlayer(scorerId); if(scorer) scorer.goals=(scorer.goals||0)+1;
+  if(assistId){ m.events.push({type:'assist', playerId:assistId, side}); const a=getPlayer(assistId); if(a) a.assists=(a.assists||0)+1; }
+  document.getElementById('matchAction').innerHTML='';
+  await saveSession(); await savePlayers(); render();
+}
+function openCard(side){
+  const m = getLiveMatch(); if(!m) return;
+  const teamIdx = side==='A'?m.teamA:m.teamB;
+  const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
+  document.getElementById('matchAction').innerHTML = `<div class="card">
+    <label class="lbl">Cartão para quem? (Time ${teamColorName(teamIdx)})</label>
+    <select id="cardPlayerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <div class="segrow" style="margin-top:10px;">
+      <div class="seg on" id="cardYellowBtn" onclick="pickCardColor('yellow')">🟨 Amarelo</div>
+      <div class="seg" id="cardRedBtn" onclick="pickCardColor('red')">🟥 Vermelho</div>
+    </div>
+    <div class="row"><button class="btn btn-primary" style="flex:1;" onclick="confirmCard('${side}')">Confirmar</button>
+    <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button></div></div>`;
+  pickCardColorVal='yellow';
+}
+let pickCardColorVal='yellow';
+function pickCardColor(c){ pickCardColorVal=c; document.getElementById('cardYellowBtn').classList.toggle('on',c==='yellow'); document.getElementById('cardRedBtn').classList.toggle('on',c==='red'); }
+async function confirmCard(side){
+  const m = getLiveMatch(); if(!m) return;
+  const playerId = document.getElementById('cardPlayerSel').value;
+  let type = pickCardColorVal;
+  m.cardCounts = m.cardCounts||{};
+  const prevY = m.cardCounts[playerId+'_y']||0;
+  if(type==='yellow' && prevY>=1) type='red';
+  if(type==='yellow') m.cardCounts[playerId+'_y']=prevY+1;
+  m.events.push({type, playerId, side});
+  const p = getPlayer(playerId);
+  if(p){ if(type==='yellow') p.yellow=(p.yellow||0)+1; else p.red=(p.red||0)+1; }
+  document.getElementById('matchAction').innerHTML='';
+  await saveSession(); await savePlayers(); render();
+}
+async function finishMatch(){
+  const m = getLiveMatch(); if(!m) return;
+  if(!confirm('Encerrar esta partida?')) return;
+  m.finished = true;
+  const teamA = state.session.teams[m.teamA].players, teamB = state.session.teams[m.teamB].players;
+  const winner = m.scoreA>m.scoreB ? 'A' : m.scoreB>m.scoreA ? 'B' : null;
+  teamA.forEach(pid=>{ const p=getPlayer(pid); if(p){ p.matchesPlayed=(p.matchesPlayed||0)+1; if(winner==='A') p.wins=(p.wins||0)+1; } });
+  teamB.forEach(pid=>{ const p=getPlayer(pid); if(p){ p.matchesPlayed=(p.matchesPlayed||0)+1; if(winner==='B') p.wins=(p.wins||0)+1; } });
+  await saveSession(); await savePlayers(); render();
+}
+
+/* ================= RANKING ================= */
+function renderRanking(){
+  const players = state.players;
+  function table(list,key,icon,fmt){
+    const rows = list.filter(p=>(p[key]||0)>0);
+    if(rows.length===0) return `<div class="empty"><span class="icon">${icon}</span><div class="msg">Ainda sem dados registrados.</div></div>`;
+    return `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">${icon}</th></tr></thead><tbody>
+      ${rows.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td>${escapeHtml(p.name)}</td><td class="num">${fmt?fmt(p):p[key]}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+  const artilheiros = players.slice().sort((a,b)=>(b.goals||0)-(a.goals||0));
+  const garcons = players.slice().sort((a,b)=>(b.assists||0)-(a.assists||0));
+  const vitorias = players.slice().sort((a,b)=>(b.wins||0)-(a.wins||0));
+  const aproveitamento = players.filter(p=>(p.matchesPlayed||0)>=3).map(p=>({...p, pct: Math.round((p.wins||0)/(p.matchesPlayed||1)*100)})).sort((a,b)=>b.pct-a.pct);
+  const cartoes = players.filter(p=>(p.yellow||0)+(p.red||0)>0).sort((a,b)=>((b.yellow||0)+2*(b.red||0))-((a.yellow||0)+2*(a.red||0)));
+
+  let html = `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
+  html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
+  html += `<div class="eyebrow">🏅 Mais vitórias</div><div class="card">${table(vitorias,'wins','🏅')}</div>`;
+  html += `<div class="eyebrow">📈 Melhor aproveitamento <small>mín. 3 jogos</small></div><div class="card">${
+    aproveitamento.length===0 ? '<div class="empty"><span class="icon">📈</span><div class="msg">Ainda sem jogadores com 3+ partidas.</div></div>'
+    : table(aproveitamento,'pct','%',p=>p.pct+'%')
+  }</div>`;
+  html += `<div class="eyebrow">🟨🟥 Cartões</div><div class="card">${
+    cartoes.length===0 ? '<div class="empty"><span class="icon">🟨</span><div class="msg">Nenhum cartão registrado ainda.</div></div>'
+    : `<table class="rank"><thead><tr><th>Jogador</th><th style="text-align:center;">🟨</th><th style="text-align:center;">🟥</th></tr></thead><tbody>
+        ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
+      </tbody></table>`
+  }</div>`;
+  return html;
+}
+
+/* ================= FINANCEIRO ================= */
+function renderFinanceiro(){
+  const mk = monthKey();
+  const players = state.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  let recebido=0, pendente=0, inadimplentes=0;
+  players.forEach(p=>{
+    const due = (p.dues||[]).find(d=>d.month===mk);
+    if(due){ if(due.status==='pago') recebido += due.value; else { pendente += due.value; inadimplentes++; } }
+  });
+
+  let html = `<div class="eyebrow">Caixa da pelada <small>${monthLabel()}</small></div>`;
+  html += `<div class="pillrow">
+    <div class="pill"><div class="v">R$${recebido}</div><div class="l">Recebido</div></div>
+    <div class="pill"><div class="v">R$${pendente}</div><div class="l">Em aberto</div></div>
+    <div class="pill"><div class="v">${inadimplentes}</div><div class="l">Inadimplentes</div></div>
+  </div>`;
+
+  html += `<div class="eyebrow">Mensalidades de ${monthLabel()}</div>`;
+  if(players.length===0){
+    html += `<div class="empty"><span class="icon">💰</span><div class="msg">Cadastre jogadores na aba Elenco para lançar cobranças.</div></div>`;
+  } else {
+    players.forEach(p=>{
+      const due = (p.dues||[]).find(d=>d.month===mk);
+      html += `<div class="card row between">
+        <div><div class="name">${escapeHtml(p.name)}</div>${due ? `<div class="meta">R$${due.value} · ${due.method}</div>` : '<div class="meta">Sem cobrança lançada</div>'}</div>
+        ${due
+          ? `<div class="row" style="gap:6px;">
+              <button class="btn btn-sm ${due.status==='pago'?'btn-primary':'btn-outline'}" onclick="toggleDue('${p.id}')">${due.status==='pago'?'Pago ✓':'Marcar pago'}</button>
+              <button class="btn btn-danger btn-sm" onclick="removeDue('${p.id}')">✕</button>
+            </div>`
+          : `<button class="btn btn-ghost btn-sm" onclick="addDue('${p.id}')">+ Lançar cobrança</button>`
+        }
+      </div>`;
+    });
+  }
+  return html;
+}
+async function addDue(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  const valueStr = prompt('Valor da mensalidade (R$):', '30');
+  if(valueStr===null) return;
+  const value = parseFloat(valueStr) || 0;
+  const method = prompt('Forma de pagamento (pix, dinheiro, cartão):', 'pix') || 'pix';
+  p.dues = p.dues || [];
+  p.dues = p.dues.filter(d=>d.month!==monthKey());
+  p.dues.push({id:uid(), month:monthKey(), value, method, status:'pendente'});
+  await savePlayers(); render();
+}
+async function toggleDue(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  const due = (p.dues||[]).find(d=>d.month===monthKey()); if(!due) return;
+  due.status = due.status==='pago' ? 'pendente' : 'pago';
+  await savePlayers(); render();
+}
+async function removeDue(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  p.dues = (p.dues||[]).filter(d=>d.month!==monthKey());
+  await savePlayers(); render();
+}
+
+/* ================= INIT ================= */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(e=>console.warn('SW falhou', e)); });
+}
+(async function init(){
+  await loadAll();
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===currentTab));
+  render();
+})();
+</script>
+</body>
+</html>
