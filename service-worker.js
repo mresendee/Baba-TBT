@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pelada-pro-v1';
+const CACHE_NAME = 'pelada-pro-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -14,6 +14,12 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  // Nunca cachear a API — ela precisa sempre buscar os dados mais recentes do banco.
+  if (e.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request).catch(() => cached))
   );
