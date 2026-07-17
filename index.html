@@ -742,11 +742,24 @@ function goToCurrentMonth(){ financeiroMonth = null; render(); }
 function renderFinanceiro(){
   const mk = currentFinanceiroMonth();
   const isCurrent = mk === monthKey();
+  const year = mk.split('-')[0];
   const players = state.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
   let recebido=0, pendente=0, inadimplentes=0;
   players.forEach(p=>{
     const due = (p.dues||[]).find(d=>d.month===mk);
     if(due){ if(due.status==='pago') recebido += due.value; else { pendente += due.value; inadimplentes++; } }
+  });
+
+  // resumo do ano inteiro
+  const meses = Array.from({length:12}, (_,i)=>year+'-'+String(i+1).padStart(2,'0'));
+  const porMes = {}; meses.forEach(mkey=>porMes[mkey]={recebido:0, pendente:0});
+  let anoRecebido=0, anoPendente=0;
+  players.forEach(p=>{
+    (p.dues||[]).forEach(d=>{
+      if(!porMes[d.month]) return;
+      if(d.status==='pago'){ porMes[d.month].recebido += d.value; anoRecebido += d.value; }
+      else { porMes[d.month].pendente += d.value; anoPendente += d.value; }
+    });
   });
 
   let html = `<div class="eyebrow">Caixa da pelada</div>`;
@@ -763,6 +776,26 @@ function renderFinanceiro(){
     <div class="pill"><div class="v">R$${recebido}</div><div class="l">Recebido</div></div>
     <div class="pill"><div class="v">R$${pendente}</div><div class="l">Em aberto</div></div>
     <div class="pill"><div class="v">${inadimplentes}</div><div class="l">Inadimplentes</div></div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="meta" style="margin-bottom:8px;">Pega as cobranças já lançadas em ${labelForMonth(mk)} e replica (mesmo valor e forma de pagamento) para os outros meses de ${year} que ainda estiverem vazios — sem mexer em meses que já têm cobrança lançada.</div>
+    <button class="btn btn-primary btn-block" onclick="replicarCobrancasDoAno()">🔁 Preencher o ano todo com base neste mês</button>
+  </div>`;
+
+  html += `<div class="eyebrow">Resumo de ${year} <small>ano todo</small></div>`;
+  html += `<div class="pillrow">
+    <div class="pill"><div class="v">R$${anoRecebido}</div><div class="l">Recebido no ano</div></div>
+    <div class="pill"><div class="v">R$${anoPendente}</div><div class="l">Em aberto no ano</div></div>
+  </div>`;
+  html += `<div class="card">
+    <table class="rank"><thead><tr><th>Mês</th><th style="text-align:center;">Recebido</th><th style="text-align:center;">Em aberto</th></tr></thead><tbody>
+      ${meses.map(mkey=>{
+        const nomeMes = labelForMonth(mkey).split(' de ')[0];
+        const destaque = mkey===mk ? 'style="color:var(--green-light); font-weight:700;"' : '';
+        return `<tr ${destaque}><td style="text-transform:capitalize;">${nomeMes}</td><td class="num">R$${porMes[mkey].recebido}</td><td class="num" style="color:${porMes[mkey].pendente>0?'var(--gold)':'var(--gray)'};">R$${porMes[mkey].pendente}</td></tr>`;
+      }).join('')}
+    </tbody></table>
   </div>`;
 
   html += `<div class="eyebrow">Mensalidades <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
@@ -809,6 +842,34 @@ async function removeDue(playerId){
   const mk = currentFinanceiroMonth();
   p.dues = (p.dues||[]).filter(d=>d.month!==mk);
   await savePlayers(); render();
+}
+async function replicarCobrancasDoAno(){
+  const mk = currentFinanceiroMonth();
+  const year = mk.split('-')[0];
+  const comCobranca = state.players.filter(p=>(p.dues||[]).some(d=>d.month===mk));
+  if(comCobranca.length===0){
+    alert(`Não há nenhuma cobrança lançada em ${labelForMonth(mk)} pra usar como modelo. Lance a cobrança de pelo menos um jogador nesse mês primeiro.`);
+    return;
+  }
+  if(!confirm(`Isso vai pegar a cobrança de cada jogador em ${labelForMonth(mk)} e criar a mesma cobrança (valor e forma de pagamento) em todos os outros meses de ${year} que ainda estiverem vazios para aquele jogador. Meses que já têm cobrança lançada não serão alterados. Continuar?`)) return;
+
+  let created = 0;
+  comCobranca.forEach(p=>{
+    const template = (p.dues||[]).find(d=>d.month===mk);
+    if(!template) return;
+    for(let m=1; m<=12; m++){
+      const key = year + '-' + String(m).padStart(2,'0');
+      if(key===mk) continue;
+      p.dues = p.dues || [];
+      if(!p.dues.some(d=>d.month===key)){
+        p.dues.push({id:uid(), month:key, value:template.value, method:template.method, status:'pendente'});
+        created++;
+      }
+    }
+  });
+  await savePlayers();
+  render();
+  alert(`Pronto! ${created} cobrança(s) criada(s) para o restante do ano. Todas entram como "pendente" — é só ir marcando como pago mês a mês.`);
 }
 
 /* ================= INIT ================= */
