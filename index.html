@@ -15,7 +15,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
@@ -149,7 +148,6 @@ table.rank td.num{font-family:'Rajdhani',sans-serif; font-size:15px; color:var(-
     <button data-t="financeiro" onclick="setTab('financeiro')"><span class="ic">💰</span><span class="lb">CAIXA</span></button>
   </nav>
 </div>
-<input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)">
 
 <script>
 /* ================= STATE ================= */
@@ -278,16 +276,6 @@ function renderElenco(){
     <button class="btn btn-primary btn-block" onclick="addPlayer()">+ Adicionar jogador</button>
   </div>`;
 
-  html += `<div class="card">
-    <div class="row between">
-      <div>
-        <div class="name" style="font-size:13px;">📥 Importar do Excel</div>
-        <div class="meta">Coluna obrigatória: <b>Nome</b>. Opcionais: Posição (GOL/ZAG/MEI/ATA), Nível (1 a 5), Convidado (sim/não).</div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('excelFile').click()">Escolher arquivo</button>
-    </div>
-  </div>`;
-
   html += `<div class="segrow">
     ${seg('todos','Todos')}${seg('confirmado','Confirmados')}${seg('espera','Espera')}${seg('ausente','Ausentes')}${seg('convidados','Convidados')}
   </div>`;
@@ -340,76 +328,6 @@ async function editPlayer(id){
   p.level = level;
   await savePlayers();
   render();
-}
-function findCol(row, patterns){
-  const keys = Object.keys(row);
-  for(const pat of patterns){
-    const k = keys.find(k=>pat.test(k.trim()));
-    if(k) return k;
-  }
-  return null;
-}
-async function handleExcelImport(event){
-  const file = event.target.files[0];
-  event.target.value = '';
-  if(!file) return;
-  if(typeof XLSX === 'undefined'){ alert('Não foi possível carregar o leitor de planilhas. Verifique sua conexão e tente novamente.'); return; }
-  try{
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, {type:'array'});
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
-    if(rows.length===0){ alert('Não encontrei nenhuma linha com dados na planilha.'); return; }
-
-    const nameKey = findCol(rows[0], [/^nome$/i, /name/i]);
-    if(!nameKey){ alert('Não encontrei uma coluna "Nome" na planilha. Verifique o cabeçalho da primeira linha.'); return; }
-
-    const posKey = findCol(rows[0], [/posi[cç][aã]o/i, /position/i]);
-    const levelKey = findCol(rows[0], [/n[ií]vel/i, /level/i]);
-    const guestKey = findCol(rows[0], [/convidado/i, /guest/i]);
-
-    const validPos = ['GOL','ZAG','MEI','ATA'];
-    const existingNames = new Set(state.players.map(p=>p.name.trim().toLowerCase()));
-    let added = 0, skippedEmpty = 0, skippedDup = 0;
-
-    rows.forEach(row=>{
-      const name = String(row[nameKey]||'').trim();
-      if(!name){ skippedEmpty++; return; }
-      if(existingNames.has(name.toLowerCase())){ skippedDup++; return; }
-
-      let position = 'MEI';
-      if(posKey){
-        const raw = String(row[posKey]||'').trim().toUpperCase().slice(0,3);
-        if(validPos.includes(raw)) position = raw;
-      }
-      let level = 3;
-      if(levelKey){
-        const n = parseInt(row[levelKey]);
-        if(!isNaN(n)) level = Math.max(1, Math.min(5, n));
-      }
-      let guest = false;
-      if(guestKey){
-        const raw = String(row[guestKey]||'').trim().toLowerCase();
-        guest = ['sim','yes','true','1','x'].includes(raw);
-      }
-
-      state.players.push({
-        id:uid(), name, position, level, guest, status:'espera',
-        goals:0, assists:0, yellow:0, red:0, matchesPlayed:0, wins:0, dues:[]
-      });
-      existingNames.add(name.toLowerCase());
-      added++;
-    });
-
-    await savePlayers();
-    render();
-    alert(`Importação concluída: ${added} jogador(es) adicionado(s).` +
-      (skippedDup>0 ? ` ${skippedDup} ignorado(s) por já existir(em) no elenco.` : '') +
-      (skippedEmpty>0 ? ` ${skippedEmpty} linha(s) ignorada(s) por não ter nome.` : ''));
-  }catch(e){
-    console.error(e);
-    alert('Não consegui ler esse arquivo. Confira se é um .xlsx, .xls ou .csv válido.');
-  }
 }
 async function removePlayer(id){
   if(!confirm('Remover este jogador? O histórico de estatísticas dele será perdido.')) return;
