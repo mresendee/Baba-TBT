@@ -471,7 +471,7 @@ function renderChegada(){
   }
 
   html += `<div class="divider"></div>
-    <button class="btn btn-outline btn-block" onclick="newPelada()">🔄 Iniciar nova pelada (zera chegada, times e partidas de hoje)</button>`;
+    <button class="btn btn-danger btn-block" onclick="encerrarPeladaDoDia()">🏁 Encerrar pelada de hoje (zera chegada, confirmações, times e partidas)</button>`;
   return html;
 }
 async function setStatus(id, status){
@@ -493,9 +493,11 @@ async function undoCheckin(id){
   await saveSession();
   render();
 }
-async function newPelada(){
-  if(!confirm('Isso vai zerar a chegada, os times sorteados e as partidas de hoje (estatísticas continuam salvas). Continuar?')) return;
+async function encerrarPeladaDoDia(){
+  if(!confirm('Isso vai encerrar a pelada de hoje: zera a chegada, as confirmações de presença, os times sorteados e as partidas do dia. As estatísticas de gols/assistências/cartões dos jogadores continuam salvas. Continuar?')) return;
+  state.players.forEach(p=>{ p.status = 'espera'; });
   state.session = { date: todayKey(), checkins:[], teams:[], matches:[] };
+  await savePlayers();
   await saveSession();
   render();
 }
@@ -737,7 +739,17 @@ function renderRanking(){
         ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
       </tbody></table>`
   }</div>`;
+  html += `<div class="divider"></div>
+    <button class="btn btn-danger btn-block" onclick="zerarRanking()">🗑️ Zerar ranking (apaga gols, assistências, cartões e vitórias de todos)</button>`;
   return html;
+}
+async function zerarRanking(){
+  if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias e jogos disputados. Essa ação não pode ser desfeita. Continuar?')) return;
+  state.players.forEach(p=>{
+    p.goals = 0; p.assists = 0; p.yellow = 0; p.red = 0; p.wins = 0; p.matchesPlayed = 0;
+  });
+  await savePlayers();
+  render();
 }
 
 /* ================= FINANCEIRO ================= */
