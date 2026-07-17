@@ -1,8 +1,13 @@
-// Ponte entre o app e o banco de dados (Vercel KV).
+// Ponte entre o app e o banco de dados (Upstash Redis, via Vercel Marketplace).
 // GET  /api/data                -> devolve { players, session, settings }
 // POST /api/data { key, value } -> salva uma das chaves: players_pro, session_pro, settings_pro
 
-const { kv } = require('@vercel/kv');
+const { Redis } = require('@upstash/redis');
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 const ALLOWED_KEYS = ['players_pro', 'session_pro', 'settings_pro'];
 
@@ -10,9 +15,9 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const [players, session, settings] = await Promise.all([
-        kv.get('players_pro'),
-        kv.get('session_pro'),
-        kv.get('settings_pro'),
+        redis.get('players_pro'),
+        redis.get('session_pro'),
+        redis.get('settings_pro'),
       ]);
       res.status(200).json({
         players: players || [],
@@ -28,7 +33,7 @@ module.exports = async function handler(req, res) {
         res.status(400).json({ error: 'Chave inválida' });
         return;
       }
-      await kv.set(key, value);
+      await redis.set(key, value);
       res.status(200).json({ ok: true });
       return;
     }
