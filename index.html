@@ -19,7 +19,7 @@
 :root{
   --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
   --green:#2E7D32; --green-light:#4CAF50; --white:#F5F6F7; --gray:#8A8F98; --gray-dim:#565B63;
-  --gold:#E4B93B; --danger:#E5484D;
+  --gold:#E4B93B; --danger:#E5484D; --blue-card:#3D8FB3;
   --tier-bronze:#A0522D; --tier-prata:#B0B7BD; --tier-ouro:#E4B93B; --tier-platina:#5FC9BE; --tier-diamante:#6FB3F2; --tier-elite:#8B5CF6;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -85,6 +85,8 @@ label.lbl{font-size:11px; color:var(--gray); margin-bottom:4px; display:block; f
 .badge-conf{background:rgba(76,175,80,0.16); color:var(--green-light);}
 .badge-wait{background:rgba(228,185,59,0.16); color:var(--gold);}
 .badge-guest{background:rgba(139,92,246,0.16); color:#a78bfa;}
+.guest-card{border-color:rgba(167,139,250,0.55) !important; background:rgba(167,139,250,0.09);}
+.guest-row{background:rgba(167,139,250,0.09); border-radius:8px; padding-left:6px; border-left:3px solid #a78bfa;}
 .badge-abs{background:rgba(229,72,77,0.14); color:var(--danger);}
 .badge-order{background:var(--green); color:#fff; font-family:'Rajdhani'; font-size:13px; min-width:22px; text-align:center;}
 
@@ -136,6 +138,7 @@ table.rank td.num{font-family:'Rajdhani',sans-serif; font-size:15px; color:var(-
 <div id="shell">
   <header>
     <div class="brand"><div class="logo"><img src="icon-192.png" alt="Escudo" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div><div><h1 id="groupName" onclick="renameGroup()">Baba TBT</h1><div class="sub" id="dateSub"></div></div></div>
+    <button class="icon-btn" onclick="showGroupCodeMenu()" title="Código da pelada" style="background:none; border:none; color:var(--white); font-size:18px; cursor:pointer;">🔑</button>
     <button class="icon-btn" onclick="refreshData()" title="Atualizar dados" style="background:none; border:none; color:var(--white); font-size:18px; cursor:pointer;">🔄</button>
   </header>
   <main id="view"><div class="empty"><span class="icon">⏳</span><div class="msg">Carregando dados...</div></div></main>
@@ -150,11 +153,24 @@ table.rank td.num{font-family:'Rajdhani',sans-serif; font-size:15px; color:var(-
 </div>
 
 <script>
+/* ================= CÓDIGO DA PELADA (multi-tenant) ================= */
+const LEGACY_CODE = 'BABATBT'; // aponta pros dados que já existiam antes desse sistema
+const CODE_STORAGE_KEY = 'pelada_group_code';
+function getGroupCode(){ return localStorage.getItem(CODE_STORAGE_KEY); }
+function setGroupCode(code){ localStorage.setItem(CODE_STORAGE_KEY, code); }
+function clearGroupCode(){ localStorage.removeItem(CODE_STORAGE_KEY); }
+function generateCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem O/0/I/1, pra evitar confusão na hora de digitar
+  let code = '';
+  for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
 /* ================= STATE ================= */
 let state = {
   players: [],
   session: { date:'', checkins:[], teams:[], matches:[] },
-  settings: { groupName:'Baba TBT' },
+  settings: { groupName:'Minha Pelada' },
   loaded:false
 };
 let currentTab = 'elenco';
@@ -167,16 +183,18 @@ function nowTime(){ return new Date().toLocaleTimeString('pt-BR',{hour:'2-digit'
 
 /* ================= STORAGE ================= */
 async function apiLoad(){
-  const r = await fetch('/api/data');
+  const code = getGroupCode();
+  const r = await fetch('/api/data?code=' + encodeURIComponent(code));
   if(!r.ok) throw new Error('Falha ao carregar dados do servidor');
   return await r.json();
 }
 async function saveKey(key, value){
+  const code = getGroupCode();
   try{
     await fetch('/api/data', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({key, value})
+      body: JSON.stringify({code, key, value})
     });
   }catch(e){
     console.error('Erro ao salvar', key, e);
@@ -191,13 +209,13 @@ async function loadAll(){
   try{
     const data = await apiLoad();
     state.players = data.players || [];
-    state.settings = data.settings || {groupName:'Baba TBT'};
+    state.settings = data.settings || {groupName:'Minha Pelada'};
     if(data.session && data.session.date === todayKey()) state.session = data.session;
     else { state.session = { date: todayKey(), checkins:[], teams:[], matches:[] }; await saveSession(); }
   }catch(e){
     console.error('Erro ao carregar dados', e);
     alert('Não consegui conectar ao servidor. Verifique sua internet e puxe a tela para atualizar.');
-    state.players = []; state.settings = {groupName:'Baba TBT'};
+    state.players = []; state.settings = {groupName:'Minha Pelada'};
     state.session = { date: todayKey(), checkins:[], teams:[], matches:[] };
   }
   state.loaded = true;
@@ -217,8 +235,8 @@ function statusBadge(s){
     espera:'<span class="badge badge-wait">Lista de espera</span>'}[s] || '';
 }
 function escapeHtml(str){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
-function teamColorName(i){ return ['Verde','Branco','Azul','Preto'][i%4]; }
-function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47'][i%4]; }
+function teamColorName(i){ return 'Time ' + (i+1); }
+function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47','#C0392B','#E4B93B','#8B5CF6','#E08A2E'][i % 8]; }
 
 /* ================= RENDER DISPATCH ================= */
 function setTab(tab){
@@ -230,7 +248,7 @@ async function refreshData(){
   try{
     const data = await apiLoad();
     state.players = data.players || [];
-    state.settings = data.settings || {groupName:'Baba TBT'};
+    state.settings = data.settings || {groupName:'Minha Pelada'};
     if(data.session && data.session.date === todayKey()) state.session = data.session;
   }catch(e){ console.warn('Não consegui atualizar agora', e); }
   render();
@@ -250,6 +268,61 @@ function render(){
 function renameGroup(){
   const n = prompt('Nome da pelada:', state.settings.groupName);
   if(n && n.trim()){ state.settings.groupName = n.trim(); saveSettings(); render(); }
+}
+
+/* ================= ONBOARDING (criar/entrar em pelada) ================= */
+function renderOnboarding(){
+  document.getElementById('tabbar').style.display = 'none';
+  document.getElementById('dateSub').textContent = '';
+  document.getElementById('groupName').textContent = 'Bem-vindo!';
+  const view = document.getElementById('view');
+  view.innerHTML = `
+    <div style="padding-top:14px; text-align:center; margin-bottom:6px;">
+      <div class="meta">Este aparelho ainda não está ligado a nenhuma pelada. Escolha uma opção abaixo:</div>
+    </div>
+    <div class="card">
+      <div class="name" style="margin-bottom:6px;">🆕 Criar uma pelada nova</div>
+      <div class="meta" style="margin-bottom:12px;">Começa vazio, pra você cadastrar do zero — nada de outra pelada aparece aqui.</div>
+      <button class="btn btn-primary btn-block" onclick="criarNovaPelada()">Criar pelada nova</button>
+    </div>
+    <div class="card">
+      <div class="name" style="margin-bottom:6px;">🔑 Entrar em uma pelada existente</div>
+      <div class="meta" style="margin-bottom:10px;">Digite o código de 6 letras/números que o organizador te passou.</div>
+      <input type="text" id="joinCodeInput" placeholder="Ex: K7XQ2P" maxlength="12" style="text-transform:uppercase; margin-bottom:10px;">
+      <button class="btn btn-outline btn-block" onclick="entrarPeladaExistente()">Entrar</button>
+    </div>
+  `;
+}
+async function criarNovaPelada(){
+  setGroupCode(generateCode());
+  await afterCodeSet();
+}
+async function entrarPeladaExistente(){
+  const raw = document.getElementById('joinCodeInput').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!raw){ alert('Digite um código válido.'); return; }
+  setGroupCode(raw);
+  await afterCodeSet();
+}
+async function afterCodeSet(){
+  document.getElementById('tabbar').style.display = '';
+  await loadAll();
+  setTab('elenco');
+}
+function showGroupCodeMenu(){
+  const code = getGroupCode();
+  const label = code === LEGACY_CODE ? `${code} (pelada original)` : code;
+  const answer = prompt(
+    `Código desta pelada: ${label}\n\n` +
+    `Pra ver os mesmos dados em outro aparelho, peça pra pessoa abrir o app e digitar esse código na tela de entrada.\n\n` +
+    `Pra TROCAR de pelada neste aparelho (por exemplo, se você organiza mais de uma), digite SAIR abaixo e confirme.\nPra só fechar, deixe em branco.`,
+    ''
+  );
+  if(answer && answer.trim().toUpperCase() === 'SAIR'){
+    if(confirm('Isso vai desconectar este aparelho desta pelada. Você poderá criar uma pelada nova ou entrar em outra com um código. Continuar?')){
+      clearGroupCode();
+      location.reload();
+    }
+  }
 }
 
 /* ================= ELENCO ================= */
@@ -283,12 +356,12 @@ function renderElenco(){
     html += `<div class="empty"><span class="icon">👥</span><div class="msg">Nenhum jogador nesse filtro ainda.<br>Cadastre o elenco no formulário acima.</div></div>`;
   } else {
     list.forEach(p=>{
-      html += `<div class="card row between">
+      html += `<div class="card row between ${p.guest?'guest-card':''}">
         <div class="row">
           ${overallBadge(p)}
           <div>
             <div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
-            <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0} 🟨${p.yellow||0} 🟥${p.red||0}</div>
+            <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0} 🟨${p.yellow||0} 🟦${p.blue||0} 🟥${p.red||0}</div>
             <div style="margin-top:4px;">${statusBadge(p.status)}</div>
           </div>
         </div>
@@ -311,7 +384,7 @@ async function addPlayer(){
   const guest = document.getElementById('newGuest').value==='1';
   state.players.push({
     id:uid(), name, position, level, guest, status:'espera',
-    goals:0, assists:0, yellow:0, red:0, matchesPlayed:0, wins:0, dues:[]
+    goals:0, assists:0, yellow:0, blue:0, red:0, matchesPlayed:0, wins:0, dues:[]
   });
   await savePlayers();
   render();
@@ -347,9 +420,9 @@ function renderChegada(){
     html += `<div class="card">`;
     arrived.forEach(c=>{
       const p = getPlayer(c.playerId); if(!p) return;
-      html += `<div class="row between" style="padding:6px 0;">
+      html += `<div class="row between ${p.guest?'guest-row':''}" style="padding:6px 4px;">
         <div class="row"><span class="badge badge-order">${c.order}</span>
-          <div><div class="name">${escapeHtml(p.name)}</div><div class="meta">chegou às ${c.time}</div></div>
+          <div><div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div><div class="meta">chegou às ${c.time}</div></div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="undoCheckin('${p.id}')">Desfazer</button>
       </div>`;
@@ -364,8 +437,8 @@ function renderChegada(){
     html += `<div class="empty"><span class="icon">✅</span><div class="msg">Sem confirmados pendentes de check-in.</div></div>`;
   } else {
     confirmedNotArrived.forEach(p=>{
-      html += `<div class="card row between">
-        <div class="name">${escapeHtml(p.name)}</div>
+      html += `<div class="card row between ${p.guest?'guest-card':''}">
+        <div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
         <button class="btn btn-primary btn-sm" onclick="checkin('${p.id}')">Cheguei</button>
       </div>`;
     });
@@ -376,8 +449,8 @@ function renderChegada(){
     html += `<div class="empty"><span class="icon">👥</span><div class="msg">Cadastre jogadores na aba Elenco primeiro.</div></div>`;
   } else {
     all.forEach(p=>{
-      html += `<div class="card row between">
-        <div class="name">${escapeHtml(p.name)}</div>
+      html += `<div class="card row between ${p.guest?'guest-card':''}">
+        <div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
         <div class="row" style="gap:4px;">
           <button class="btn btn-sm ${p.status==='confirmado'?'btn-primary':'btn-outline'}" onclick="setStatus('${p.id}','confirmado')">Confirmar</button>
           <button class="btn btn-sm ${p.status==='espera'?'btn-outline':'btn-outline'}" style="${p.status==='espera'?'border-color:var(--gold); color:var(--gold);':''}" onclick="setStatus('${p.id}','espera')">Espera</button>
@@ -426,41 +499,70 @@ let manualAssignment = {}; // { playerId: teamIndex }
 
 function resetManual(){ manualAssignment = {}; }
 
+function associadosPresentes(){
+  return state.session.checkins.map(c=>getPlayer(c.playerId)).filter(p=>p && !p.guest);
+}
+function convidadosPresentes(){
+  return state.session.checkins.map(c=>getPlayer(c.playerId)).filter(p=>p && p.guest);
+}
+function regraSeisAtiva(){ return associadosPresentes().length >= 18; }
+function effectiveNumTeams(){
+  return regraSeisAtiva() ? Math.floor(associadosPresentes().length / 6) : sorteioNumTeams;
+}
+function computeTargets(n, count){
+  if(n<=0) return [];
+  const base = Math.floor(count/n);
+  const extra = count % n;
+  return Array.from({length:n}, (_,i)=> base + (i<extra?1:0));
+}
+
 function renderSorteio(){
   const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
+  const qtdAssociados = associadosPresentes().length;
+  const qtdConvidados = convidadosPresentes().length;
+  const regraAtiva = regraSeisAtiva();
+  const n = effectiveNumTeams();
+
   let html = `<div class="eyebrow">Sorteio de times <small>${presentes.length} presente(s)</small></div>`;
-  html += `<div class="card">
-    <label class="lbl">Número de times</label>
-    <div class="segrow">${[2,3,4].map(n=>`<div class="seg ${n===sorteioNumTeams?'on':''}" onclick="sorteioNumTeams=${n}; resetManual(); render();">${n} times</div>`).join('')}</div>
-    <label class="lbl">Modo</label>
+  html += `<div class="card">`;
+  if(regraAtiva){
+    html += `<div class="meta" style="margin-bottom:10px;">🔒 <b>Regra dos 6 ativa:</b> com ${qtdAssociados} associados presentes, o número de times é calculado automaticamente em grupos de 6 → <b>${n} times</b>.</div>`;
+  } else {
+    html += `<label class="lbl">Número de times</label>
+    <div class="segrow">${[2,3,4].map(x=>`<div class="seg ${x===sorteioNumTeams?'on':''}" onclick="sorteioNumTeams=${x}; resetManual(); render();">${x} times</div>`).join('')}</div>
+    <div class="meta" style="margin-bottom:10px;">Com 18 ou mais associados presentes, o app passa a formar times de 6 automaticamente.</div>`;
+  }
+  html += `<label class="lbl">Modo</label>
     <div class="segrow">
-      <div class="seg ${sorteioMode==='aleatorio'?'on':''}" onclick="sorteioMode='aleatorio'; resetManual(); render();">🎲 Aleatório</div>
+      <div class="seg ${sorteioMode==='aleatorio'?'on':''}" onclick="sorteioMode='aleatorio'; resetManual(); render();">🔢 Por chegada</div>
       <div class="seg ${sorteioMode==='balanceado'?'on':''}" onclick="sorteioMode='balanceado'; resetManual(); render();">⚖️ Balanceado</div>
       <div class="seg ${sorteioMode==='manual'?'on':''}" onclick="sorteioMode='manual'; resetManual(); render();">✋ Manual</div>
     </div>
-    ${sorteioMode==='balanceado' ? '<div class="meta" style="margin-bottom:10px;">Distribui goleiros um por time e equilibra o nível técnico total de cada equipe.</div>' : ''}
+    ${sorteioMode==='aleatorio' ? '<div class="meta" style="margin-bottom:10px;">Preenche os times na ordem em que os associados chegaram (o 1º que chegou vai pro Time 1, o 2º pro Time 2, e assim por diante).</div>' : ''}
+    ${sorteioMode==='balanceado' ? '<div class="meta" style="margin-bottom:10px;">Distribui goleiros um por time e equilibra o nível técnico total de cada equipe (em caso de empate de nível, usa a ordem de chegada).</div>' : ''}
     ${sorteioMode==='manual' ? '<div class="meta" style="margin-bottom:10px;">Escolha o time de cada atleta manualmente e confirme quando terminar.</div>' : ''}
-    ${sorteioMode!=='manual' ? `<button class="btn btn-primary btn-block" onclick="sortear()" ${presentes.length < sorteioNumTeams*2 ? 'disabled' : ''}>Sortear times</button>
-    ${presentes.length < sorteioNumTeams*2 ? `<div class="meta" style="margin-top:8px;">Marque a chegada de pelo menos ${sorteioNumTeams*2} jogadores.</div>` : ''}` : ''}
+    ${qtdConvidados>0 ? `<div class="meta" style="margin-bottom:10px;">👥 ${qtdConvidados} convidado(s) — entram só depois dos associados, um por time, também na ordem de chegada.</div>` : ''}
+    ${sorteioMode!=='manual' ? `<button class="btn btn-primary btn-block" onclick="sortear()" ${n<1 || qtdAssociados < n ? 'disabled' : ''}>Sortear times</button>
+    ${n<1 || qtdAssociados < n ? `<div class="meta" style="margin-top:8px;">É preciso pelo menos 1 associado por time (${qtdAssociados}/${n}). Marque mais chegadas ou reduza o número de times.</div>` : ''}` : ''}
   </div>`;
 
   if(sorteioMode==='manual'){
     if(presentes.length===0){
       html += `<div class="empty"><span class="icon">🕐</span><div class="msg">Ninguém fez check-in ainda na aba Chegada.</div></div>`;
     } else {
-      const counts = Array.from({length:sorteioNumTeams}, (_,i)=>presentes.filter(p=>manualAssignment[p.id]===i).length);
+      const counts = Array.from({length:n}, (_,i)=>presentes.filter(p=>manualAssignment[p.id]===i).length);
       html += `<div class="card">
         <div class="row" style="gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-          ${counts.map((c,i)=>`<span class="badge" style="background:${teamColorHex(i)}; color:#fff;">Time ${teamColorName(i)}: ${c}</span>`).join('')}
+          ${counts.map((c,i)=>`<span class="badge" style="background:${teamColorHex(i)}; color:#fff;">${teamColorName(i)}: ${c}</span>`).join('')}
         </div>
       </div>`;
       presentes.forEach(p=>{
-        html += `<div class="card">
+        html += `<div class="card ${p.guest?'guest-card':''}">
           <div class="row between" style="margin-bottom:8px;">
-            <div class="row">${overallBadge(p)}<div><div class="name">${escapeHtml(p.name)}</div><div class="meta">${p.position}</div></div></div>
+            <div class="row">${overallBadge(p)}<div><div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div><div class="meta">${p.position}</div></div></div>
           </div>
           <div class="segrow" style="margin-bottom:0;">
-            ${Array.from({length:sorteioNumTeams}, (_,i)=>`<div class="seg ${manualAssignment[p.id]===i?'on':''}" style="${manualAssignment[p.id]===i?`background:${teamColorHex(i)}; border-color:${teamColorHex(i)};`:''}" onclick="setManualTeam('${p.id}',${i})">${teamColorName(i)}</div>`).join('')}
+            ${Array.from({length:n}, (_,i)=>`<div class="seg ${manualAssignment[p.id]===i?'on':''}" style="${manualAssignment[p.id]===i?`background:${teamColorHex(i)}; border-color:${teamColorHex(i)};`:''}" onclick="setManualTeam('${p.id}',${i})">${teamColorName(i)}</div>`).join('')}
           </div>
         </div>`;
       });
@@ -470,18 +572,21 @@ function renderSorteio(){
   }
 
   if(state.session.teams.length>0){
-    html += `<div class="eyebrow" style="margin-top:14px;">Times sorteados</div>`;
+    html += `<div class="eyebrow" style="margin-top:14px;">Times sorteados <small>toque no time ao lado de alguém pra mudar</small></div>`;
     state.session.teams.forEach((team,i)=>{
       const avg = team.players.length ? Math.round(team.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0)/team.players.length) : 0;
       html += `<div class="card">
         <div class="row between" style="margin-bottom:8px;">
-          <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">Time ${teamColorName(i)}</span>
+          <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">${teamColorName(i)}</span>
           <span class="meta">nível médio ${avg}</span>
         </div>`;
       team.players.forEach(pid=>{
         const p = getPlayer(pid); if(!p) return;
-        html += `<div class="row between" style="padding:4px 0;">
-          <div class="row">${overallBadge(p)}<div><div class="name">${escapeHtml(p.name)}</div><div class="meta">${p.position}</div></div></div>
+        html += `<div class="row between ${p.guest?'guest-row':''}" style="padding:4px 4px;">
+          <div class="row">${overallBadge(p)}<div><div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div><div class="meta">${p.position}</div></div></div>
+          <select onchange="moverJogadorDeTime('${pid}', this.value)" style="width:auto; padding:6px 8px; font-size:11px;">
+            ${state.session.teams.map((tm,ti)=>`<option value="${ti}" ${ti===i?'selected':''}>${teamColorName(ti)}</option>`).join('')}
+          </select>
         </div>`;
       });
       html += `</div>`;
@@ -495,12 +600,12 @@ function setManualTeam(playerId, teamIdx){
 }
 async function confirmarSorteioManual(){
   const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
-  const n = sorteioNumTeams;
+  const n = effectiveNumTeams();
   const teams = Array.from({length:n}, ()=>({players:[]}));
   let unassigned = 0;
   presentes.forEach(p=>{
     const t = manualAssignment[p.id];
-    if(t===undefined){ unassigned++; return; }
+    if(t===undefined || t>=n){ unassigned++; return; }
     teams[t].players.push(p.id);
   });
   if(unassigned>0 && !confirm(`${unassigned} jogador(es) ainda sem time escolhido — eles ficarão de fora dos times. Continuar mesmo assim?`)) return;
@@ -509,28 +614,74 @@ async function confirmarSorteioManual(){
   await saveSession();
   render();
 }
-function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+async function moverJogadorDeTime(playerId, newTeamIdxStr){
+  const newIdx = parseInt(newTeamIdxStr);
+  state.session.teams.forEach(t=>{ t.players = t.players.filter(id=>id!==playerId); });
+  state.session.teams[newIdx].players.push(playerId);
+  await saveSession();
+  render();
+}
+function checkinOrderOf(playerId){
+  const c = state.session.checkins.find(c=>c.playerId===playerId);
+  return c ? c.order : Infinity;
+}
+function orderByArrival(players){
+  return players.slice().sort((a,b)=>checkinOrderOf(a.id)-checkinOrderOf(b.id));
+}
+function distribuirConvidados(convidados, teams, n){
+  const ordem = orderByArrival(convidados);
+  let i = 0;
+  while(i < ordem.length){
+    for(let t=0; t<n && i<ordem.length; t++){
+      teams[t].players.push(ordem[i].id);
+      i++;
+    }
+  }
+}
 async function sortear(){
-  const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
-  const n = sorteioNumTeams;
+  const associados = associadosPresentes();
+  const convidados = convidadosPresentes();
+  const n = effectiveNumTeams();
+  if(n<1){ alert('Não há jogadores suficientes pra formar times.'); return; }
   const teams = Array.from({length:n}, ()=>({players:[]}));
+  const targets = computeTargets(n, associados.length);
 
   if(sorteioMode==='aleatorio'){
-    shuffle(presentes).forEach((p,i)=>teams[i%n].players.push(p.id));
+    const ordem = orderByArrival(associados);
+    let idx=0;
+    for(let t=0; t<n; t++){
+      for(let k=0; k<targets[t] && idx<ordem.length; k++){
+        teams[t].players.push(ordem[idx].id);
+        idx++;
+      }
+    }
   } else {
-    const goleiros = shuffle(presentes.filter(p=>p.position==='GOL'));
-    const outros = shuffle(presentes.filter(p=>p.position!=='GOL')).sort((a,b)=>b.level-a.level);
-    goleiros.forEach((p,i)=>teams[i%n].players.push(p.id));
+    const goleiros = orderByArrival(associados.filter(p=>p.position==='GOL'));
+    const outros = orderByArrival(associados.filter(p=>p.position!=='GOL')).sort((a,b)=>b.level-a.level);
+    goleiros.forEach(p=>{
+      let best=-1;
+      for(let i=0;i<n;i++){
+        if(teams[i].players.length < targets[i] && (best===-1 || teams[i].players.length < teams[best].players.length)) best=i;
+      }
+      if(best===-1) return;
+      teams[best].players.push(p.id);
+    });
     const sums = teams.map(t=>t.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0));
     outros.forEach(p=>{
-      let best=0;
-      for(let i=1;i<n;i++){
-        if(sums[i]<sums[best] || (sums[i]===sums[best] && teams[i].players.length<teams[best].players.length)) best=i;
+      let best=-1;
+      for(let i=0;i<n;i++){
+        if(teams[i].players.length >= targets[i]) continue;
+        if(best===-1 || sums[i]<sums[best]) best=i;
       }
+      if(best===-1) return;
       teams[best].players.push(p.id);
       sums[best]+=p.level;
     });
   }
+
+  // convidados só entram depois dos associados já distribuídos, um por time
+  distribuirConvidados(convidados, teams, n);
+
   state.session.teams = teams;
   state.session.matches = [];
   await saveSession();
@@ -551,8 +702,8 @@ function renderPartida(){
     html += `<div class="card">
       <label class="lbl">Times da partida</label>
       <div class="grid2" style="margin-bottom:10px;">
-        <select id="selTeamA">${teams.map((t,i)=>`<option value="${i}">Time ${teamColorName(i)}</option>`).join('')}</select>
-        <select id="selTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>Time ${teamColorName(i)}</option>`).join('')}</select>
+        <select id="selTeamA">${teams.map((t,i)=>`<option value="${i}">${teamColorName(i)}</option>`).join('')}</select>
+        <select id="selTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
       </div>
       <button class="btn btn-primary btn-block" onclick="startMatch()">Iniciar partida</button>
     </div>`;
@@ -569,8 +720,8 @@ function renderPartida(){
       <button class="btn btn-outline" onclick="openGoal('B')">⚽ Gol ${teamColorName(live.teamB)}</button>
     </div>
     <div class="grid2" style="margin-bottom:10px;">
-      <button class="btn btn-outline" onclick="openCard('A')">🟨🟥 Cartão ${teamColorName(live.teamA)}</button>
-      <button class="btn btn-outline" onclick="openCard('B')">🟨🟥 Cartão ${teamColorName(live.teamB)}</button>
+      <button class="btn btn-outline" onclick="openCard('A')">🟨🟦🟥 Cartão ${teamColorName(live.teamA)}</button>
+      <button class="btn btn-outline" onclick="openCard('B')">🟨🟦🟥 Cartão ${teamColorName(live.teamB)}</button>
     </div>
     <div id="matchAction"></div>
     <div class="card">
@@ -599,7 +750,7 @@ function avgLevel(teamIdx){
 }
 function renderEventRow(ev){
   const p = getPlayer(ev.playerId); const name = p?escapeHtml(p.name):'—';
-  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
+  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
   const [icon,label] = map[ev.type] || ['•',name];
   return `<div class="evrow"><span>${icon}</span><span>${label}</span></div>`;
 }
@@ -616,7 +767,7 @@ function openGoal(side){
   const teamIdx = side==='A'?m.teamA:m.teamB;
   const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
   document.getElementById('matchAction').innerHTML = `<div class="card">
-    <label class="lbl">Quem marcou o gol? (Time ${teamColorName(teamIdx)})</label>
+    <label class="lbl">Quem marcou o gol? (${teamColorName(teamIdx)})</label>
     <select id="scorerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
     <label class="lbl" style="margin-top:10px;">Assistência (opcional)</label>
     <select id="assistSel"><option value="">Sem assistência</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
@@ -641,10 +792,11 @@ function openCard(side){
   const teamIdx = side==='A'?m.teamA:m.teamB;
   const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
   document.getElementById('matchAction').innerHTML = `<div class="card">
-    <label class="lbl">Cartão para quem? (Time ${teamColorName(teamIdx)})</label>
+    <label class="lbl">Cartão para quem? (${teamColorName(teamIdx)})</label>
     <select id="cardPlayerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
     <div class="segrow" style="margin-top:10px;">
       <div class="seg on" id="cardYellowBtn" onclick="pickCardColor('yellow')">🟨 Amarelo</div>
+      <div class="seg" id="cardBlueBtn" onclick="pickCardColor('blue')">🟦 Azul</div>
       <div class="seg" id="cardRedBtn" onclick="pickCardColor('red')">🟥 Vermelho</div>
     </div>
     <div class="row"><button class="btn btn-primary" style="flex:1;" onclick="confirmCard('${side}')">Confirmar</button>
@@ -652,7 +804,12 @@ function openCard(side){
   pickCardColorVal='yellow';
 }
 let pickCardColorVal='yellow';
-function pickCardColor(c){ pickCardColorVal=c; document.getElementById('cardYellowBtn').classList.toggle('on',c==='yellow'); document.getElementById('cardRedBtn').classList.toggle('on',c==='red'); }
+function pickCardColor(c){
+  pickCardColorVal=c;
+  document.getElementById('cardYellowBtn').classList.toggle('on',c==='yellow');
+  document.getElementById('cardBlueBtn').classList.toggle('on',c==='blue');
+  document.getElementById('cardRedBtn').classList.toggle('on',c==='red');
+}
 async function confirmCard(side){
   const m = getLiveMatch(); if(!m) return;
   const playerId = document.getElementById('cardPlayerSel').value;
@@ -663,7 +820,11 @@ async function confirmCard(side){
   if(type==='yellow') m.cardCounts[playerId+'_y']=prevY+1;
   m.events.push({type, playerId, side});
   const p = getPlayer(playerId);
-  if(p){ if(type==='yellow') p.yellow=(p.yellow||0)+1; else p.red=(p.red||0)+1; }
+  if(p){
+    if(type==='yellow') p.yellow=(p.yellow||0)+1;
+    else if(type==='blue') p.blue=(p.blue||0)+1;
+    else p.red=(p.red||0)+1;
+  }
   document.getElementById('matchAction').innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
@@ -692,7 +853,7 @@ function renderRanking(){
   const garcons = players.slice().sort((a,b)=>(b.assists||0)-(a.assists||0));
   const vitorias = players.slice().sort((a,b)=>(b.wins||0)-(a.wins||0));
   const aproveitamento = players.filter(p=>(p.matchesPlayed||0)>=3).map(p=>({...p, pct: Math.round((p.wins||0)/(p.matchesPlayed||1)*100)})).sort((a,b)=>b.pct-a.pct);
-  const cartoes = players.filter(p=>(p.yellow||0)+(p.red||0)>0).sort((a,b)=>((b.yellow||0)+2*(b.red||0))-((a.yellow||0)+2*(a.red||0)));
+  const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0).sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0)));
 
   let html = `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
   html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
@@ -701,10 +862,10 @@ function renderRanking(){
     aproveitamento.length===0 ? '<div class="empty"><span class="icon">📈</span><div class="msg">Ainda sem jogadores com 3+ partidas.</div></div>'
     : table(aproveitamento,'pct','%',p=>p.pct+'%')
   }</div>`;
-  html += `<div class="eyebrow">🟨🟥 Cartões</div><div class="card">${
+  html += `<div class="eyebrow">🟨🟦🟥 Cartões</div><div class="card">${
     cartoes.length===0 ? '<div class="empty"><span class="icon">🟨</span><div class="msg">Nenhum cartão registrado ainda.</div></div>'
-    : `<table class="rank"><thead><tr><th>Jogador</th><th style="text-align:center;">🟨</th><th style="text-align:center;">🟥</th></tr></thead><tbody>
-        ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
+    : `<table class="rank"><thead><tr><th>Jogador</th><th style="text-align:center;">🟨</th><th style="text-align:center;">🟦</th><th style="text-align:center;">🟥</th></tr></thead><tbody>
+        ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--blue-card);">${p.blue||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
       </tbody></table>`
   }</div>`;
   html += `<div class="divider"></div>
@@ -714,7 +875,7 @@ function renderRanking(){
 async function zerarRanking(){
   if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias e jogos disputados. Essa ação não pode ser desfeita. Continuar?')) return;
   state.players.forEach(p=>{
-    p.goals = 0; p.assists = 0; p.yellow = 0; p.red = 0; p.wins = 0; p.matchesPlayed = 0;
+    p.goals = 0; p.assists = 0; p.yellow = 0; p.blue = 0; p.red = 0; p.wins = 0; p.matchesPlayed = 0;
   });
   await savePlayers();
   render();
@@ -743,7 +904,7 @@ function renderFinanceiro(){
   const mk = currentFinanceiroMonth();
   const isCurrent = mk === monthKey();
   const year = mk.split('-')[0];
-  const players = state.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const players = state.players.filter(p=>!p.guest).sort((a,b)=>a.name.localeCompare(b.name));
   let recebido=0, pendente=0, inadimplentes=0;
   players.forEach(p=>{
     const due = (p.dues||[]).find(d=>d.month===mk);
@@ -799,6 +960,7 @@ function renderFinanceiro(){
   </div>`;
 
   html += `<div class="eyebrow">Mensalidades <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
+  html += `<div class="meta" style="margin-bottom:10px;">Convidados não entram nessa lista automaticamente — só associados têm mensalidade por padrão.</div>`;
   if(players.length===0){
     html += `<div class="empty"><span class="icon">💰</span><div class="msg">Cadastre jogadores na aba Elenco para lançar cobranças.</div></div>`;
   } else {
@@ -877,6 +1039,10 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(e=>console.warn('SW falhou', e)); });
 }
 (async function init(){
+  if(!getGroupCode()){
+    renderOnboarding();
+    return;
+  }
   await loadAll();
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===currentTab));
   render();
