@@ -395,9 +395,13 @@ async function editPlayer(id){
   const position = (prompt('Posição (GOL, ZAG, MEI, ATA):', p.position) || p.position).toUpperCase();
   const levelStr = prompt('Nível técnico (1 a 5):', p.level); if(levelStr===null) return;
   const level = Math.max(1, Math.min(5, parseInt(levelStr)||p.level));
+  const statusStr = prompt('Associado ou Convidado? Digite "associado" ou "convidado":', p.guest ? 'convidado' : 'associado');
+  if(statusStr===null) return;
+  const guest = statusStr.trim().toLowerCase().startsWith('c');
   p.name = name.trim() || p.name;
   p.position = ['GOL','ZAG','MEI','ATA'].includes(position) ? position : p.position;
   p.level = level;
+  p.guest = guest;
   await savePlayers();
   render();
 }
@@ -505,12 +509,23 @@ function associadosPresentes(){
 function convidadosPresentes(){
   return state.session.checkins.map(c=>getPlayer(c.playerId)).filter(p=>p && p.guest);
 }
-function regraSeisAtiva(){ return associadosPresentes().length >= 18; }
-function effectiveNumTeams(){
-  return regraSeisAtiva() ? Math.floor(associadosPresentes().length / 6) : sorteioNumTeams;
-}
+function regra6Garantida(n){ return associadosPresentes().length >= n*6; }
+function effectiveNumTeams(){ return sorteioNumTeams; }
 function computeTargets(n, count){
   if(n<=0) return [];
+  if(count >= n*6){
+    // garante 6 por time e distribui o excedente (7º, 8º jogador...) de forma equilibrada entre os times
+    const target = Array(n).fill(6);
+    let leftover = count - n*6;
+    let i = 0;
+    while(leftover>0){
+      target[i % n]++;
+      leftover--;
+      i++;
+    }
+    return target;
+  }
+  // sem associados suficientes pra garantir 6 em cada — divide o mais equilibrado possível
   const base = Math.floor(count/n);
   const extra = count % n;
   return Array.from({length:n}, (_,i)=> base + (i<extra?1:0));
@@ -520,17 +535,17 @@ function renderSorteio(){
   const presentes = state.session.checkins.map(c=>getPlayer(c.playerId)).filter(Boolean);
   const qtdAssociados = associadosPresentes().length;
   const qtdConvidados = convidadosPresentes().length;
-  const regraAtiva = regraSeisAtiva();
   const n = effectiveNumTeams();
+  const regraAtiva = regra6Garantida(n);
 
   let html = `<div class="eyebrow">Sorteio de times <small>${presentes.length} presente(s)</small></div>`;
   html += `<div class="card">`;
+  html += `<label class="lbl">Número de times</label>
+    <div class="segrow">${[2,3,4].map(x=>`<div class="seg ${x===sorteioNumTeams?'on':''}" onclick="sorteioNumTeams=${x}; resetManual(); render();">${x} times</div>`).join('')}</div>`;
   if(regraAtiva){
-    html += `<div class="meta" style="margin-bottom:10px;">🔒 <b>Regra dos 6 ativa:</b> com ${qtdAssociados} associados presentes, o número de times é calculado automaticamente em grupos de 6 → <b>${n} times</b>.</div>`;
+    html += `<div class="meta" style="margin-bottom:10px;">🔒 <b>Regra dos 6 ativa:</b> com ${qtdAssociados} associados presentes, o sorteio tenta formar grupos de 6 por time dentro dos ${n} times escolhidos.</div>`;
   } else {
-    html += `<label class="lbl">Número de times</label>
-    <div class="segrow">${[2,3,4].map(x=>`<div class="seg ${x===sorteioNumTeams?'on':''}" onclick="sorteioNumTeams=${x}; resetManual(); render();">${x} times</div>`).join('')}</div>
-    <div class="meta" style="margin-bottom:10px;">Com 18 ou mais associados presentes, o app passa a formar times de 6 automaticamente.</div>`;
+    html += `<div class="meta" style="margin-bottom:10px;">Com 18 ou mais associados presentes, o sorteio passa a tentar formar grupos de 6 por time.</div>`;
   }
   html += `<label class="lbl">Modo</label>
     <div class="segrow">
@@ -539,7 +554,7 @@ function renderSorteio(){
       <div class="seg ${sorteioMode==='manual'?'on':''}" onclick="sorteioMode='manual'; resetManual(); render();">✋ Manual</div>
     </div>
     ${sorteioMode==='aleatorio' ? '<div class="meta" style="margin-bottom:10px;">Preenche os times na ordem em que os associados chegaram (o 1º que chegou vai pro Time 1, o 2º pro Time 2, e assim por diante).</div>' : ''}
-    ${sorteioMode==='balanceado' ? '<div class="meta" style="margin-bottom:10px;">Distribui goleiros um por time e equilibra o nível técnico total de cada equipe (em caso de empate de nível, usa a ordem de chegada).</div>' : ''}
+    ${sorteioMode==='balanceado' ? '<div class="meta" style="margin-bottom:10px;">Ordena os associados por nível técnico (do mais alto pro mais baixo) e, em caso de empate de nível, usa a ordem de chegada — distribuindo sempre pro time com menor soma de nível no momento, goleiros um por time primeiro.</div>' : ''}
     ${sorteioMode==='manual' ? '<div class="meta" style="margin-bottom:10px;">Escolha o time de cada atleta manualmente e confirme quando terminar.</div>' : ''}
     ${qtdConvidados>0 ? `<div class="meta" style="margin-bottom:10px;">👥 ${qtdConvidados} convidado(s) — entram só depois dos associados, um por time, também na ordem de chegada.</div>` : ''}
     ${sorteioMode!=='manual' ? `<button class="btn btn-primary btn-block" onclick="sortear()" ${n<1 || qtdAssociados < n ? 'disabled' : ''}>Sortear times</button>
