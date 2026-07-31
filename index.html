@@ -371,6 +371,7 @@ function renderElenco(){
         </div>
       </div>`;
     });
+    html += `<button class="btn btn-primary btn-block" onclick="compartilharElenco()" style="margin-top:4px;">📤 Compartilhar elenco (imagem)</button>`;
   }
   return html;
 }
@@ -388,6 +389,106 @@ async function addPlayer(){
   });
   await savePlayers();
   render();
+}
+function gerarImagemElenco(){
+  const players = state.players.slice().sort((a,b)=>b.level-a.level);
+  const W = 720;
+  const headerH = 150;
+  const rowH = 46;
+  const footerH = 46;
+  const H = headerH + Math.max(players.length,1)*rowH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#12171c');
+  grad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 30px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 50);
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText('Elenco', W/2, 82);
+
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillText(`${players.length} jogador(es) — ${todayLabel()}`, W/2, 108);
+
+  let y = headerH;
+  if(players.length===0){
+    ctx.fillStyle = '#565B63';
+    ctx.font = 'italic 16px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('(nenhum jogador cadastrado)', 42, y+24);
+  }
+  players.forEach((p,i)=>{
+    if(i%2===0){
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fillRect(24, y, W-48, rowH);
+    }
+    // badge de nível
+    const tierColors = {Bronze:'#A0522D', Prata:'#B0B7BD', Ouro:'#E4B93B', Platina:'#5FC9BE', Elite:'#8B5CF6'};
+    const tc = tierColors[tierOf(p.level)] || '#8A8F98';
+    ctx.strokeStyle = tc;
+    ctx.lineWidth = 2;
+    roundRect(ctx, 34, y+8, 34, 30, 6);
+    ctx.stroke();
+    ctx.fillStyle = tc;
+    ctx.font = 'bold 15px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(p.level), 51, y+28);
+
+    ctx.fillStyle = p.guest ? '#a78bfa' : '#F5F6F7';
+    ctx.font = p.position==='GOL' ? 'bold 17px Arial, sans-serif' : '17px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    const tag = p.position==='GOL' ? '🧤 ' : '';
+    ctx.fillText(tag + p.name + (p.guest ? '  (convidado)' : ''), 82, y+28);
+
+    ctx.fillStyle = '#8A8F98';
+    ctx.font = '14px Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(p.position, W-42, y+28);
+    y += rowH;
+  });
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharImagemGenerica(canvas, filename, titulo){
+  canvas.toBlob(async (blob)=>{
+    if(!blob){ alert('Não consegui gerar a imagem.'); return; }
+    const file = new File([blob], filename, {type:'image/png'});
+    try{
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({ files:[file], title:titulo, text:`${titulo} — ${state.settings.groupName}` });
+        return;
+      }
+    }catch(e){
+      if(e && e.name==='AbortError') return;
+      console.error(e);
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('Esse aparelho não abriu o compartilhamento direto, então a imagem foi baixada — é só anexar ela manualmente no WhatsApp.');
+  }, 'image/png', 0.95);
+}
+async function compartilharElenco(){
+  if(state.players.length===0){ alert('Cadastre pelo menos um jogador primeiro.'); return; }
+  await compartilharImagemGenerica(gerarImagemElenco(), 'elenco.png', 'Elenco');
 }
 async function editPlayer(id){
   const p = getPlayer(id); if(!p) return;
@@ -723,31 +824,7 @@ function gerarImagemTimes(){
 }
 async function compartilharTimes(){
   if(!state.session.teams || state.session.teams.length===0){ alert('Sorteie os times primeiro.'); return; }
-  const canvas = gerarImagemTimes();
-  canvas.toBlob(async (blob)=>{
-    if(!blob){ alert('Não consegui gerar a imagem.'); return; }
-    const file = new File([blob], 'times-sorteados.png', {type:'image/png'});
-    try{
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({
-          files:[file],
-          title:'Times sorteados',
-          text:`Times sorteados — ${state.settings.groupName}`
-        });
-        return;
-      }
-    }catch(e){
-      if(e && e.name==='AbortError') return; // usuário cancelou o compartilhamento
-      console.error(e);
-    }
-    // fallback: baixa a imagem pra compartilhar manualmente
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'times-sorteados.png';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    alert('Esse aparelho não abriu o compartilhamento direto, então a imagem foi baixada — é só anexar ela manualmente no WhatsApp.');
-  }, 'image/png', 0.95);
+  await compartilharImagemGenerica(gerarImagemTimes(), 'times-sorteados.png', 'Times sorteados');
 }
 function checkinOrderOf(playerId){
   const c = state.session.checkins.find(c=>c.playerId===playerId);
