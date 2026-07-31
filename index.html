@@ -944,6 +944,7 @@ function renderPartida(){
       <div class="meta" style="margin-bottom:6px;">Eventos da partida</div>
       ${live.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' : live.events.slice().reverse().map(renderEventRow).join('')}
     </div>
+    <button class="btn btn-primary btn-block" onclick="compartilharPartida('${live.id}')" style="margin-bottom:8px;">📤 Compartilhar placar (imagem)</button>
     <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
   }
 
@@ -951,10 +952,13 @@ function renderPartida(){
   if(finished.length>0){
     html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas hoje</div>`;
     finished.forEach(m=>{
-      html += `<div class="card row between">
-        <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
-        <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
-        <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+      html += `<div class="card">
+        <div class="row between" style="margin-bottom:8px;">
+          <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+          <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
+          <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+        </div>
+        <button class="btn btn-ghost btn-block btn-sm" onclick="compartilharPartida('${m.id}')">📤 Compartilhar (imagem)</button>
       </div>`;
     });
   }
@@ -969,6 +973,110 @@ function renderEventRow(ev){
   const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
   const [icon,label] = map[ev.type] || ['•',name];
   return `<div class="evrow"><span>${icon}</span><span>${label}</span></div>`;
+}
+function getMatchById(matchId){ return state.session.matches.find(m=>m.id===matchId); }
+function eventLabel(ev){
+  const p = getPlayer(ev.playerId); const name = p ? p.name : '—';
+  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
+  return map[ev.type] || ['•', name];
+}
+function gerarImagemPartida(matchId){
+  const m = getMatchById(matchId); if(!m) return null;
+  const events = m.events;
+  const W = 720;
+  const headerH = 110;
+  const scoreboardH = 190;
+  const rowH = 34;
+  const eventsHeaderH = 40;
+  const footerH = 46;
+  const eventsAreaH = events.length>0 ? eventsHeaderH + events.length*rowH : 60;
+  const H = headerH + scoreboardH + eventsAreaH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const bgGrad = ctx.createLinearGradient(0,0,0,H);
+  bgGrad.addColorStop(0, '#12171c');
+  bgGrad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 28px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 46);
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillText(todayLabel() + (m.finished ? ' — partida encerrada' : ' — ao vivo'), W/2, 74);
+
+  // placar
+  const sbY = headerH, sbH = scoreboardH;
+  const sbGrad = ctx.createRadialGradient(W/2, sbY, 40, W/2, sbY+sbH/2, W/1.3);
+  sbGrad.addColorStop(0, '#1b3a20');
+  sbGrad.addColorStop(1, '#0d1610');
+  ctx.fillStyle = sbGrad;
+  roundRect(ctx, 24, sbY, W-48, sbH, 16);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(76,175,80,0.35)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, 24, sbY, W-48, sbH, 16);
+  ctx.stroke();
+
+  const midY = sbY + sbH/2;
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 20px Arial, sans-serif';
+  ctx.fillText(teamColorName(m.teamA), W*0.27, midY-30);
+  ctx.fillText(teamColorName(m.teamB), W*0.73, midY-30);
+
+  ctx.fillStyle = '#E4B93B';
+  ctx.font = 'bold 64px Arial, sans-serif';
+  ctx.fillText(String(m.scoreA), W*0.27, midY+45);
+  ctx.fillText(String(m.scoreB), W*0.73, midY+45);
+
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = 'bold 26px Arial, sans-serif';
+  ctx.fillText('×', W/2, midY+18);
+
+  // eventos
+  let y = headerH + scoreboardH + 20;
+  ctx.textAlign = 'left';
+  if(events.length===0){
+    ctx.fillStyle = '#565B63';
+    ctx.font = 'italic 16px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Nenhum evento registrado', W/2, y+18);
+  } else {
+    ctx.fillStyle = '#E4B93B';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.fillText('Eventos da partida', 30, y+16);
+    y += eventsHeaderH;
+    events.forEach((ev,i)=>{
+      if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(24,y,W-48,rowH); }
+      const [icon,label] = eventLabel(ev);
+      ctx.fillStyle = '#F5F6F7';
+      ctx.font = '16px Arial, sans-serif';
+      ctx.fillText(`${icon}  ${label}`, 42, y+24);
+      ctx.fillStyle = '#8A8F98';
+      ctx.font = '13px Arial, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(ev.side==='A' ? teamColorName(m.teamA) : teamColorName(m.teamB), W-42, y+24);
+      ctx.textAlign = 'left';
+      y += rowH;
+    });
+  }
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharPartida(matchId){
+  const canvas = gerarImagemPartida(matchId);
+  if(!canvas){ alert('Não encontrei essa partida.'); return; }
+  await compartilharImagemGenerica(canvas, 'partida.png', 'Resultado da partida');
 }
 async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
@@ -1084,9 +1192,97 @@ function renderRanking(){
         ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--blue-card);">${p.blue||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
       </tbody></table>`
   }</div>`;
+  html += `<button class="btn btn-primary btn-block" onclick="compartilharRanking()" style="margin-bottom:10px;">📤 Compartilhar ranking (imagem)</button>`;
   html += `<div class="divider"></div>
     <button class="btn btn-danger btn-block" onclick="zerarRanking()">🗑️ Zerar ranking (apaga gols, assistências, cartões e vitórias de todos)</button>`;
   return html;
+}
+function gerarImagemRanking(){
+  const players = state.players;
+  const artilheiros = players.filter(p=>(p.goals||0)>0).sort((a,b)=>(b.goals||0)-(a.goals||0)).slice(0,5);
+  const garcons = players.filter(p=>(p.assists||0)>0).sort((a,b)=>(b.assists||0)-(a.assists||0)).slice(0,5);
+  const vitorias = players.filter(p=>(p.wins||0)>0).sort((a,b)=>(b.wins||0)-(a.wins||0)).slice(0,5);
+  const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0)
+    .sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0))).slice(0,5);
+
+  const sections = [
+    {title:'🥇 Artilharia', icon:'⚽', rows: artilheiros.map(p=>[p.name, String(p.goals||0)])},
+    {title:'🎯 Garçons (assistências)', icon:'🎯', rows: garcons.map(p=>[p.name, String(p.assists||0)])},
+    {title:'🏅 Mais vitórias', icon:'🏅', rows: vitorias.map(p=>[p.name, String(p.wins||0)])},
+    {title:'🟨🟦🟥 Cartões', icon:'🟨', rows: cartoes.map(p=>[p.name, `${p.yellow||0} 🟨  ${p.blue||0} 🟦  ${p.red||0} 🟥`])},
+  ].filter(s=>s.rows.length>0);
+
+  const W = 720;
+  const headerH = 150;
+  const sectionTitleH = 44;
+  const rowH = 38;
+  const sectionGap = 16;
+  const footerH = 46;
+  let H = headerH;
+  sections.forEach(s=> H += sectionTitleH + s.rows.length*rowH + sectionGap);
+  H += footerH;
+  if(sections.length===0) H += 60;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#12171c');
+  grad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 30px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 50);
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText('Ranking', W/2, 82);
+
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillText(todayLabel(), W/2, 108);
+
+  let y = headerH;
+  if(sections.length===0){
+    ctx.fillStyle = '#565B63';
+    ctx.font = 'italic 16px Arial, sans-serif';
+    ctx.fillText('Ainda sem estatísticas registradas', W/2, y+30);
+  }
+  sections.forEach(sec=>{
+    ctx.fillStyle = '#E4B93B';
+    ctx.font = 'bold 19px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(sec.title, 30, y+26);
+    y += sectionTitleH;
+    sec.rows.forEach((row,i)=>{
+      if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(24,y,W-48,rowH); }
+      ctx.fillStyle = i===0 ? '#E4B93B' : '#F5F6F7';
+      ctx.font = 'bold 16px Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${i+1}. ${row[0]}`, 42, y+25);
+      ctx.fillStyle = '#8A8F98';
+      ctx.font = '16px Arial, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(row[1], W-42, y+25);
+      y += rowH;
+    });
+    y += sectionGap;
+  });
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharRanking(){
+  if(state.players.length===0){ alert('Cadastre jogadores e registre estatísticas primeiro.'); return; }
+  await compartilharImagemGenerica(gerarImagemRanking(), 'ranking.png', 'Ranking');
 }
 async function zerarRanking(){
   if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias e jogos disputados. Essa ação não pode ser desfeita. Continuar?')) return;
