@@ -247,7 +247,11 @@ function statusBadge(s){
     espera:'<span class="badge badge-wait">Lista de espera</span>'}[s] || '';
 }
 function escapeHtml(str){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
-function teamColorName(i){ return 'Time ' + (i+1); }
+function teamColorName(i){
+  const t = state.session.teams && state.session.teams[i];
+  if(t && t.name) return t.name;
+  return 'Time ' + (i+1);
+}
 function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47','#C0392B','#E4B93B','#8B5CF6','#E08A2E'][i % 8]; }
 
 /* ================= RENDER DISPATCH ================= */
@@ -770,7 +774,10 @@ function renderSorteio(){
       const avg = team.players.length ? Math.round(team.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0)/team.players.length) : 0;
       html += `<div class="card">
         <div class="row between" style="margin-bottom:8px;">
-          <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">${teamColorName(i)}</span>
+          <div class="row" style="gap:6px;">
+            <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">${teamColorName(i)}</span>
+            <button class="btn btn-ghost btn-sm" onclick="renomearTime(${i})" title="Renomear time">✏️</button>
+          </div>
           <span class="meta">nível médio ${avg}</span>
         </div>`;
       team.players.forEach(pid=>{
@@ -950,6 +957,16 @@ function distribuirGrupos(teams, targets, idsDisponiveis){
     });
   });
   return jaColocados;
+}
+async function renomearTime(i){
+  if(!state.session.teams[i]) return;
+  const atual = teamColorName(i);
+  const novo = prompt('Nome do time:', atual);
+  if(novo===null) return;
+  const nome = novo.trim();
+  state.session.teams[i].name = nome || null;
+  await saveSession();
+  render();
 }
 async function resetarTimes(){
   if(!confirm('Isso vai apagar os times sorteados e os grupos de 3 configurados (as partidas e o restante da pelada de hoje não são afetados). Use isso quando quiser sortear os times do zero, por exemplo pra começar um novo campeonato. Continuar?')) return;
