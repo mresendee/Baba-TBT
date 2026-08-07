@@ -205,18 +205,30 @@ async function savePlayers(){ await saveKey('players_pro', state.players); }
 async function saveSession(){ await saveKey('session_pro', state.session); }
 async function saveSettings(){ await saveKey('settings_pro', state.settings); }
 
+function mergeSessionData(data){
+  const incoming = data.session;
+  const isNewDay = !incoming || incoming.date !== todayKey();
+  state.session = {
+    date: todayKey(),
+    checkins: isNewDay ? [] : (incoming.checkins || []),
+    matches: isNewDay ? [] : (incoming.matches || []),
+    teams: (incoming && incoming.teams) || [],
+    grupos3: (incoming && incoming.grupos3) || []
+  };
+  return isNewDay;
+}
 async function loadAll(){
   try{
     const data = await apiLoad();
     state.players = data.players || [];
     state.settings = data.settings || {groupName:'Minha Pelada'};
-    if(data.session && data.session.date === todayKey()) state.session = data.session;
-    else { state.session = { date: todayKey(), checkins:[], teams:[], matches:[] }; await saveSession(); }
+    const isNewDay = mergeSessionData(data);
+    if(isNewDay) await saveSession();
   }catch(e){
     console.error('Erro ao carregar dados', e);
     alert('Não consegui conectar ao servidor. Verifique sua internet e puxe a tela para atualizar.');
     state.players = []; state.settings = {groupName:'Minha Pelada'};
-    state.session = { date: todayKey(), checkins:[], teams:[], matches:[] };
+    state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[] };
   }
   state.loaded = true;
 }
@@ -249,7 +261,7 @@ async function refreshData(){
     const data = await apiLoad();
     state.players = data.players || [];
     state.settings = data.settings || {groupName:'Minha Pelada'};
-    if(data.session && data.session.date === todayKey()) state.session = data.session;
+    mergeSessionData(data);
   }catch(e){ console.warn('Não consegui atualizar agora', e); }
   render();
 }
@@ -566,7 +578,7 @@ function renderChegada(){
   }
 
   html += `<div class="divider"></div>
-    <button class="btn btn-danger btn-block" onclick="encerrarPeladaDoDia()">🏁 Encerrar pelada de hoje (zera chegada, confirmações, times e partidas)</button>`;
+    <button class="btn btn-danger btn-block" onclick="encerrarPeladaDoDia()">🏁 Encerrar pelada de hoje (zera chegada, confirmações e partidas)</button>`;
   return html;
 }
 async function setStatus(id, status){
@@ -589,9 +601,10 @@ async function undoCheckin(id){
   render();
 }
 async function encerrarPeladaDoDia(){
-  if(!confirm('Isso vai encerrar a pelada de hoje: zera a chegada, as confirmações de presença, os times sorteados e as partidas do dia. As estatísticas de gols/assistências/cartões dos jogadores continuam salvas. Continuar?')) return;
+  if(!confirm('Isso vai encerrar a pelada de hoje: zera a chegada, as confirmações de presença e as partidas do dia. Os times sorteados continuam salvos (use o botão "Resetar times" na aba Sorteio se quiser sortear tudo de novo). As estatísticas de gols/assistências/cartões dos jogadores continuam salvas. Continuar?')) return;
   state.players.forEach(p=>{ p.status = 'espera'; });
-  state.session = { date: todayKey(), checkins:[], teams:[], matches:[] };
+  state.session.checkins = [];
+  state.session.matches = [];
   await savePlayers();
   await saveSession();
   render();
@@ -601,8 +614,68 @@ async function encerrarPeladaDoDia(){
 let sorteioNumTeams = 2;
 let sorteioMode = 'balanceado';
 let manualAssignment = {}; // { playerId: teamIndex }
+let grupoSelecaoAtual = []; // ids sendo selecionados pra formar um novo grupo de 3
 
 function resetManual(){ manualAssignment = {}; }
+
+function renderGruposSection(n){
+  const presentesAssoc = associadosPresentes();
+  const grupos = state.session.grupos3 || [];
+  const jaAgrupados = new Set(grupos.flatMap(g=>g.players));
+  const disponiveis = presentesAssoc.filter(p=>!jaAgrupados.has(p.id));
+
+  let html = `<div class="card">
+    <label class="lbl">Grupos de 3 (ficam sempre em times diferentes)</label>
+    <div class="meta" style="margin-bottom:8px;">Escolha trios de associados (ex: os mais fortes, ou um grupo de amigos) pra garantir que cada um caia num time diferente no sorteio.</div>`;
+
+  if(n<3){
+    html += `<div class="meta" style="margin-bottom:8px; color:var(--gold);">⚠️ Com menos de 3 times, o grupo pode não conseguir se separar completamente.</div>`;
+  }
+
+  if(grupos.length>0){
+    grupos.forEach((g,gi)=>{
+      const nomes = g.players.map(id=>getPlayer(id)?.name || '?').join(', ');
+      html += `<div class="row between" style="padding:6px 0; border-bottom:1px dashed var(--line);">
+        <div class="meta">Grupo ${gi+1}: <b style="color:var(--white);">${escapeHtml(nomes)}</b></div>
+        <button class="btn btn-danger btn-sm" onclick="removerGrupo3(${gi})">✕</button>
+      </div>`;
+    });
+  }
+
+  if(disponiveis.length>0){
+    html += `<div class="meta" style="margin:10px 0 6px;">Toque em 3 associados presentes pra formar um grupo:</div>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+        ${disponiveis.map(p=>`<div class="seg ${grupoSelecaoAtual.includes(p.id)?'on':''}" style="flex:none; padding:8px 12px;" onclick="toggleGrupoSelecao('${p.id}')">${escapeHtml(p.name)}</div>`).join('')}
+      </div>
+      <button class="btn btn-outline btn-block" onclick="criarGrupo3()" ${grupoSelecaoAtual.length!==3?'disabled':''}>Criar grupo (${grupoSelecaoAtual.length}/3 selecionado(s))</button>`;
+  } else if(grupos.length===0){
+    html += `<div class="meta">Nenhum associado disponível pra agrupar ainda — marque a chegada de mais gente na aba Chegada.</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+function toggleGrupoSelecao(playerId){
+  const idx = grupoSelecaoAtual.indexOf(playerId);
+  if(idx>=0){ grupoSelecaoAtual.splice(idx,1); render(); return; }
+  if(grupoSelecaoAtual.length>=3){ alert('Esse grupo já tem 3 jogadores. Remova um antes de adicionar outro.'); return; }
+  grupoSelecaoAtual.push(playerId);
+  render();
+}
+async function criarGrupo3(){
+  if(grupoSelecaoAtual.length!==3) return;
+  state.session.grupos3 = state.session.grupos3 || [];
+  state.session.grupos3.push({id:uid(), players:[...grupoSelecaoAtual]});
+  grupoSelecaoAtual = [];
+  await saveSession();
+  render();
+}
+async function removerGrupo3(idx){
+  state.session.grupos3 = state.session.grupos3 || [];
+  state.session.grupos3.splice(idx,1);
+  await saveSession();
+  render();
+}
 
 function associadosPresentes(){
   return state.session.checkins.map(c=>getPlayer(c.playerId)).filter(p=>p && !p.guest);
@@ -662,6 +735,10 @@ function renderSorteio(){
     ${n<1 || qtdAssociados < n ? `<div class="meta" style="margin-top:8px;">É preciso pelo menos 1 associado por time (${qtdAssociados}/${n}). Marque mais chegadas ou reduza o número de times.</div>` : ''}` : ''}
   </div>`;
 
+  if(sorteioMode!=='manual'){
+    html += renderGruposSection(n);
+  }
+
   if(sorteioMode==='manual'){
     if(presentes.length===0){
       html += `<div class="empty"><span class="icon">🕐</span><div class="msg">Ninguém fez check-in ainda na aba Chegada.</div></div>`;
@@ -708,6 +785,8 @@ function renderSorteio(){
       html += `</div>`;
     });
     html += `<button class="btn btn-primary btn-block" onclick="compartilharTimes()" style="margin-bottom:6px;">📤 Compartilhar times (imagem)</button>`;
+    html += `<button class="btn btn-outline btn-block" onclick="resetarTimes()" style="margin-bottom:6px;">🗑️ Resetar times sorteados</button>`;
+    html += `<div class="meta" style="text-align:center; margin-bottom:6px;">Os times ficam salvos mesmo se você fechar o app — só somem se você resetar aqui.</div>`;
   }
   return html;
 }
@@ -843,6 +922,42 @@ function distribuirConvidados(convidados, teams, n){
     }
   }
 }
+function distribuirGrupos(teams, targets, idsDisponiveis){
+  const grupos = state.session.grupos3 || [];
+  const jaColocados = new Set();
+  grupos.forEach(g=>{
+    const membros = orderByArrival(g.players.filter(id=>idsDisponiveis.has(id)).map(getPlayer).filter(Boolean));
+    const timesUsados = new Set();
+    membros.forEach(p=>{
+      let best=-1;
+      // 1ª tentativa: time livre (sob o alvo) que ainda não tem ninguém desse grupo
+      for(let i=0;i<teams.length;i++){
+        if(timesUsados.has(i)) continue;
+        if(teams[i].players.length >= targets[i]) continue;
+        if(best===-1 || teams[i].players.length < teams[best].players.length) best=i;
+      }
+      // 2ª tentativa (sem time livre único): qualquer time sob o alvo, mesmo repetindo
+      if(best===-1){
+        for(let i=0;i<teams.length;i++){
+          if(teams[i].players.length >= targets[i]) continue;
+          if(best===-1 || teams[i].players.length < teams[best].players.length) best=i;
+        }
+      }
+      if(best===-1) return;
+      teams[best].players.push(p.id);
+      timesUsados.add(best);
+      jaColocados.add(p.id);
+    });
+  });
+  return jaColocados;
+}
+async function resetarTimes(){
+  if(!confirm('Isso vai apagar os times sorteados e os grupos de 3 configurados (as partidas e o restante da pelada de hoje não são afetados). Use isso quando quiser sortear os times do zero, por exemplo pra começar um novo campeonato. Continuar?')) return;
+  state.session.teams = [];
+  state.session.grupos3 = [];
+  await saveSession();
+  render();
+}
 async function sortear(){
   const associados = associadosPresentes();
   const convidados = convidadosPresentes();
@@ -850,10 +965,12 @@ async function sortear(){
   if(n<1){ alert('Não há jogadores suficientes pra formar times.'); return; }
   const teams = Array.from({length:n}, ()=>({players:[]}));
   const targets = computeTargets(n, associados.length);
+  const idsDisponiveis = new Set(associados.map(p=>p.id));
+  const jaColocados = distribuirGrupos(teams, targets, idsDisponiveis);
 
   if(sorteioMode==='aleatorio'){
-    const goleiros = orderByArrival(associados.filter(p=>p.position==='GOL'));
-    const outros = orderByArrival(associados.filter(p=>p.position!=='GOL'));
+    const goleiros = orderByArrival(associados.filter(p=>p.position==='GOL' && !jaColocados.has(p.id)));
+    const outros = orderByArrival(associados.filter(p=>p.position!=='GOL' && !jaColocados.has(p.id)));
     goleiros.forEach(p=>{
       let best=-1;
       for(let i=0;i<n;i++){
@@ -872,8 +989,8 @@ async function sortear(){
       teams[best].players.push(p.id);
     });
   } else {
-    const goleiros = orderByArrival(associados.filter(p=>p.position==='GOL'));
-    const outros = orderByArrival(associados.filter(p=>p.position!=='GOL')).sort((a,b)=>b.level-a.level);
+    const goleiros = orderByArrival(associados.filter(p=>p.position==='GOL' && !jaColocados.has(p.id)));
+    const outros = orderByArrival(associados.filter(p=>p.position!=='GOL' && !jaColocados.has(p.id))).sort((a,b)=>b.level-a.level);
     goleiros.forEach(p=>{
       let best=-1;
       for(let i=0;i<n;i++){
