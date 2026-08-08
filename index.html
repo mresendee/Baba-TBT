@@ -211,7 +211,7 @@ function mergeSessionData(data){
   state.session = {
     date: todayKey(),
     checkins: isNewDay ? [] : (incoming.checkins || []),
-    matches: isNewDay ? [] : (incoming.matches || []),
+    matches: (incoming && incoming.matches) || [],
     teams: (incoming && incoming.teams) || [],
     grupos3: (incoming && incoming.grupos3) || []
   };
@@ -605,10 +605,9 @@ async function undoCheckin(id){
   render();
 }
 async function encerrarPeladaDoDia(){
-  if(!confirm('Isso vai encerrar a pelada de hoje: zera a chegada, as confirmações de presença e as partidas do dia. Os times sorteados continuam salvos (use o botão "Resetar times" na aba Sorteio se quiser sortear tudo de novo). As estatísticas de gols/assistências/cartões dos jogadores continuam salvas. Continuar?')) return;
+  if(!confirm('Isso vai encerrar a pelada de hoje: zera a chegada e as confirmações de presença. Os times sorteados e o histórico de partidas (usado na classificação) continuam salvos — use o botão "Resetar times" na aba Sorteio se quiser começar um campeonato novo do zero. Continuar?')) return;
   state.players.forEach(p=>{ p.status = 'espera'; });
   state.session.checkins = [];
-  state.session.matches = [];
   await savePlayers();
   await saveSession();
   render();
@@ -969,9 +968,10 @@ async function renomearTime(i){
   render();
 }
 async function resetarTimes(){
-  if(!confirm('Isso vai apagar os times sorteados e os grupos de 3 configurados (as partidas e o restante da pelada de hoje não são afetados). Use isso quando quiser sortear os times do zero, por exemplo pra começar um novo campeonato. Continuar?')) return;
+  if(!confirm('Isso vai apagar os times sorteados, os grupos de 3 e todo o histórico de partidas (usado na classificação) — a chegada de hoje não é afetada. Use isso quando quiser começar um campeonato novo do zero. Continuar?')) return;
   state.session.teams = [];
   state.session.grupos3 = [];
+  state.session.matches = [];
   await saveSession();
   render();
 }
@@ -1082,7 +1082,7 @@ function renderPartida(){
     <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
   }
 
-  const finished = state.session.matches.filter(m=>m.finished);
+  const finished = state.session.matches.filter(m=>m.finished && m.date===todayKey());
   if(finished.length>0){
     html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas hoje</div>`;
     finished.forEach(m=>{
@@ -1216,7 +1216,7 @@ async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
   const b = parseInt(document.getElementById('selTeamB').value);
   if(a===b){ alert('Escolha dois times diferentes.'); return; }
-  state.session.matches.push({id:uid(), teamA:a, teamB:b, scoreA:0, scoreB:0, events:[], finished:false, cardCounts:{}});
+  state.session.matches.push({id:uid(), date:todayKey(), teamA:a, teamB:b, scoreA:0, scoreB:0, events:[], finished:false, cardCounts:{}});
   await saveSession(); render();
 }
 function getLiveMatch(){ return state.session.matches.find(m=>!m.finished); }
@@ -1298,6 +1298,24 @@ async function finishMatch(){
 }
 
 /* ================= RANKING ================= */
+function computeStandings(){
+  const teams = state.session.teams || [];
+  const tabela = teams.map((t,i)=>({idx:i, nome:teamColorName(i), j:0, v:0, e:0, d:0, gp:0, gc:0, sg:0, pts:0}));
+  const finalizadas = (state.session.matches || []).filter(m=>m.finished);
+  finalizadas.forEach(m=>{
+    const A = tabela[m.teamA], B = tabela[m.teamB];
+    if(!A || !B) return;
+    A.j++; B.j++;
+    A.gp += m.scoreA; A.gc += m.scoreB;
+    B.gp += m.scoreB; B.gc += m.scoreA;
+    if(m.scoreA > m.scoreB){ A.v++; A.pts+=3; B.d++; }
+    else if(m.scoreB > m.scoreA){ B.v++; B.pts+=3; A.d++; }
+    else { A.e++; B.e++; A.pts+=1; B.pts+=1; }
+  });
+  tabela.forEach(t=> t.sg = t.gp - t.gc);
+  tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
+  return tabela;
+}
 function renderRanking(){
   const players = state.players;
   function table(list,key,icon,fmt){
@@ -1312,8 +1330,33 @@ function renderRanking(){
   const vitorias = players.slice().sort((a,b)=>(b.wins||0)-(a.wins||0));
   const aproveitamento = players.filter(p=>(p.matchesPlayed||0)>=3).map(p=>({...p, pct: Math.round((p.wins||0)/(p.matchesPlayed||1)*100)})).sort((a,b)=>b.pct-a.pct);
   const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0).sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0)));
+  const classificacao = computeStandings();
 
-  let html = `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
+  let html = `<div class="eyebrow">🏆 Classificação <small>times do campeonato</small></div><div class="card">`;
+  if(state.session.teams.length===0){
+    html += `<div class="empty"><span class="icon">🏆</span><div class="msg">Sorteie os times na aba Sorteio primeiro.</div></div>`;
+  } else {
+    html += `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
+      <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
+      <tbody>
+        ${classificacao.map((t,i)=>`<tr>
+          <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.j}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
+          <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
+          <td class="num" style="font-size:17px;">${t.pts}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+    if(classificacao.every(t=>t.j===0)){
+      html += `<div class="meta" style="margin-top:8px;">Nenhuma partida encerrada ainda — a tabela atualiza sozinha conforme as partidas forem finalizadas na aba Partida.</div>`;
+    }
+  }
+  html += `</div>`;
+
+  html += `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
   html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
   html += `<div class="eyebrow">🏅 Mais vitórias</div><div class="card">${table(vitorias,'wins','🏅')}</div>`;
   html += `<div class="eyebrow">📈 Melhor aproveitamento <small>mín. 3 jogos</small></div><div class="card">${
@@ -1339,7 +1382,10 @@ function gerarImagemRanking(){
   const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0)
     .sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0))).slice(0,5);
 
+  const classificacao = computeStandings().filter(t=>t.j>0);
+
   const sections = [
+    {title:'🏆 Classificação (J/V/E/D/SG/Pts)', icon:'🏆', rows: classificacao.map(t=>[t.nome, `${t.j}/${t.v}/${t.e}/${t.d}/${t.sg>0?'+':''}${t.sg}/${t.pts}pts`])},
     {title:'🥇 Artilharia', icon:'⚽', rows: artilheiros.map(p=>[p.name, String(p.goals||0)])},
     {title:'🎯 Garçons (assistências)', icon:'🎯', rows: garcons.map(p=>[p.name, String(p.assists||0)])},
     {title:'🏅 Mais vitórias', icon:'🏅', rows: vitorias.map(p=>[p.name, String(p.wins||0)])},
