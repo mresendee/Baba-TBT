@@ -169,7 +169,7 @@ function generateCode(){
 /* ================= STATE ================= */
 let state = {
   players: [],
-  session: { date:'', checkins:[], teams:[], matches:[] },
+  session: { date:'', checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 },
   settings: { groupName:'Minha Pelada' },
   loaded:false
 };
@@ -213,7 +213,8 @@ function mergeSessionData(data){
     checkins: isNewDay ? [] : (incoming.checkins || []),
     matches: (incoming && incoming.matches) || [],
     teams: (incoming && incoming.teams) || [],
-    grupos3: (incoming && incoming.grupos3) || []
+    grupos3: (incoming && incoming.grupos3) || [],
+    rodadaAtual: (incoming && incoming.rodadaAtual) || 1
   };
   return isNewDay;
 }
@@ -228,7 +229,7 @@ async function loadAll(){
     console.error('Erro ao carregar dados', e);
     alert('Não consegui conectar ao servidor. Verifique sua internet e puxe a tela para atualizar.');
     state.players = []; state.settings = {groupName:'Minha Pelada'};
-    state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[] };
+    state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 };
   }
   state.loaded = true;
 }
@@ -968,10 +969,11 @@ async function renomearTime(i){
   render();
 }
 async function resetarTimes(){
-  if(!confirm('Isso vai apagar os times sorteados, os grupos de 3 e todo o histórico de partidas (usado na classificação) — a chegada de hoje não é afetada. Use isso quando quiser começar um campeonato novo do zero. Continuar?')) return;
+  if(!confirm('Isso vai apagar os times sorteados, os grupos de 3, todo o histórico de partidas (usado na classificação) e volta a contagem de rodadas pra 1 — a chegada de hoje não é afetada. Use isso quando quiser começar um campeonato novo do zero. Continuar?')) return;
   state.session.teams = [];
   state.session.grupos3 = [];
   state.session.matches = [];
+  state.session.rodadaAtual = 1;
   await saveSession();
   render();
 }
@@ -1047,6 +1049,15 @@ function renderPartida(){
     return html;
   }
   const live = state.session.matches.find(m=>!m.finished);
+  const rodadaAtual = state.session.rodadaAtual || 1;
+
+  html += `<div class="card row between" style="padding:10px 14px;">
+    <div><div class="name">Rodada ${rodadaAtual}</div><div class="meta">em andamento</div></div>
+    <button class="btn btn-outline btn-sm" onclick="proximaRodada()" ${live?'disabled':''}>Próxima rodada ▶</button>
+  </div>`;
+  if(live){
+    html += `<div class="meta" style="text-align:center; margin-bottom:10px;">Encerre a partida ao vivo antes de avançar de rodada.</div>`;
+  }
 
   if(!live){
     html += `<div class="card">
@@ -1120,6 +1131,14 @@ async function zerarPartidas(){
 }
 function agruparPorRodada(matches){
   const finalizadas = (matches || []).filter(m=>m.finished);
+  if(finalizadas.some(m=>m.rodada)){
+    const numeros = [...new Set(finalizadas.map(m=>m.rodada||1))].sort((a,b)=>a-b);
+    return numeros.map(num=>{
+      const jogos = finalizadas.filter(m=>(m.rodada||1)===num);
+      return { rodada:num, date: jogos[jogos.length-1].date, jogos };
+    });
+  }
+  // compatibilidade: partidas antigas sem número de rodada, agrupa por data
   const datasUnicas = [...new Set(finalizadas.map(m=>m.date))].sort();
   return datasUnicas.map((date,i)=>({
     rodada: i+1,
@@ -1315,11 +1334,17 @@ async function compartilharRodada(rodadaNum){
   if(!r){ alert('Não encontrei essa rodada.'); return; }
   await compartilharImagemGenerica(gerarImagemRodada(r), `rodada-${rodadaNum}.png`, `Rodada ${rodadaNum}`);
 }
+async function proximaRodada(){
+  if(getLiveMatch()){ alert('Encerre a partida ao vivo antes de avançar de rodada.'); return; }
+  state.session.rodadaAtual = (state.session.rodadaAtual || 1) + 1;
+  await saveSession();
+  render();
+}
 async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
   const b = parseInt(document.getElementById('selTeamB').value);
   if(a===b){ alert('Escolha dois times diferentes.'); return; }
-  state.session.matches.push({id:uid(), date:todayKey(), teamA:a, teamB:b, scoreA:0, scoreB:0, events:[], finished:false, cardCounts:{}});
+  state.session.matches.push({id:uid(), date:todayKey(), rodada:state.session.rodadaAtual||1, teamA:a, teamB:b, scoreA:0, scoreB:0, events:[], finished:false, cardCounts:{}});
   await saveSession(); render();
 }
 function getLiveMatch(){ return state.session.matches.find(m=>!m.finished); }
