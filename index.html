@@ -1073,10 +1073,12 @@ function renderPartida(){
       <button class="btn btn-outline" onclick="openCard('A')">🟨🟦🟥 Cartão ${teamColorName(live.teamA)}</button>
       <button class="btn btn-outline" onclick="openCard('B')">🟨🟦🟥 Cartão ${teamColorName(live.teamB)}</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="openOwnGoal()">🥅 Gol contra</button>
     <div id="matchAction"></div>
     <div class="card">
-      <div class="meta" style="margin-bottom:6px;">Eventos da partida</div>
-      ${live.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' : live.events.slice().reverse().map(renderEventRow).join('')}
+      <div class="meta" style="margin-bottom:6px;">Eventos da partida <small>toque em ✏️ ou 🗑️ pra corrigir</small></div>
+      ${live.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' :
+        live.events.map((ev,idx)=>({ev,idx})).slice().reverse().map(({ev,idx})=>renderEventRowEditable(ev,idx)).join('')}
     </div>
     <button class="btn btn-primary btn-block" onclick="compartilharPartida('${live.id}')" style="margin-bottom:8px;">📤 Compartilhar placar (imagem)</button>
     <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
@@ -1103,15 +1105,24 @@ function avgLevel(teamIdx){
   return Math.round(team.players.reduce((s,pid)=>s+(getPlayer(pid)?.level||0),0)/team.players.length);
 }
 function renderEventRow(ev){
-  const p = getPlayer(ev.playerId); const name = p?escapeHtml(p.name):'—';
-  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
-  const [icon,label] = map[ev.type] || ['•',name];
+  const [icon,label] = eventLabel(ev);
   return `<div class="evrow"><span>${icon}</span><span>${label}</span></div>`;
+}
+function renderEventRowEditable(ev, idx){
+  const [icon,label] = eventLabel(ev);
+  const canEdit = ev.type==='goal' || ev.type==='owngoal';
+  return `<div class="evrow" style="justify-content:space-between;">
+    <span>${icon} ${label}</span>
+    <span style="display:flex; gap:4px; flex-shrink:0;">
+      ${canEdit ? `<button class="btn btn-ghost btn-sm" style="padding:3px 8px; font-size:11px;" onclick="abrirEdicaoGol(${idx})">✏️</button>` : ''}
+      <button class="btn btn-danger btn-sm" style="padding:3px 8px; font-size:11px;" onclick="excluirEvento(${idx})">🗑️</button>
+    </span>
+  </div>`;
 }
 function getMatchById(matchId){ return state.session.matches.find(m=>m.id===matchId); }
 function eventLabel(ev){
   const p = getPlayer(ev.playerId); const name = p ? p.name : '—';
-  const map = {goal:['⚽',`Gol de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
+  const map = {goal:['⚽',`Gol de ${name}`], owngoal:['🥅',`Gol contra de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
   return map[ev.type] || ['•', name];
 }
 function gerarImagemPartida(matchId){
@@ -1242,6 +1253,92 @@ async function confirmGoal(side){
   m.events.push({type:'goal', playerId:scorerId, side});
   const scorer = getPlayer(scorerId); if(scorer) scorer.goals=(scorer.goals||0)+1;
   if(assistId){ m.events.push({type:'assist', playerId:assistId, side}); const a=getPlayer(assistId); if(a) a.assists=(a.assists||0)+1; }
+  document.getElementById('matchAction').innerHTML='';
+  await saveSession(); await savePlayers(); render();
+}
+function openOwnGoal(){
+  const m = getLiveMatch(); if(!m) return;
+  document.getElementById('matchAction').innerHTML = `<div class="card">
+    <label class="lbl">Gol contra — de qual time é o jogador que marcou contra?</label>
+    <div class="segrow">
+      <div class="seg on" id="ogTeamA" onclick="pickOwnGoalTeam('A')">${teamColorName(m.teamA)}</div>
+      <div class="seg" id="ogTeamB" onclick="pickOwnGoalTeam('B')">${teamColorName(m.teamB)}</div>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">O gol vai contar pro time adversário — escolha o jogador que desviou contra o próprio gol.</div>
+    <select id="ogPlayerSel"></select>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmOwnGoal()">Confirmar gol contra</button>
+      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+    </div></div>`;
+  pickOwnGoalTeam('A');
+}
+let ownGoalSide = 'A';
+function pickOwnGoalTeam(side){
+  const m = getLiveMatch(); if(!m) return;
+  ownGoalSide = side;
+  document.getElementById('ogTeamA').classList.toggle('on', side==='A');
+  document.getElementById('ogTeamB').classList.toggle('on', side==='B');
+  const teamIdx = side==='A' ? m.teamA : m.teamB;
+  const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
+  document.getElementById('ogPlayerSel').innerHTML = players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+}
+async function confirmOwnGoal(){
+  const m = getLiveMatch(); if(!m) return;
+  const playerId = document.getElementById('ogPlayerSel').value;
+  const beneficiado = ownGoalSide==='A' ? 'B' : 'A'; // time do jogador marca contra si, o outro time ganha o gol
+  if(beneficiado==='A') m.scoreA++; else m.scoreB++;
+  m.events.push({type:'owngoal', playerId, side:beneficiado});
+  document.getElementById('matchAction').innerHTML='';
+  await saveSession(); render();
+}
+function abrirEdicaoGol(eventIndex){
+  const m = getLiveMatch(); if(!m) return;
+  const ev = m.events[eventIndex]; if(!ev) return;
+  const isOwn = ev.type==='owngoal';
+  const teamIdx = ev.side==='A' ? m.teamA : m.teamB;
+  const teamParaSelecionar = isOwn ? (ev.side==='A' ? m.teamB : m.teamA) : teamIdx;
+  const players = state.session.teams[teamParaSelecionar].players.map(getPlayer).filter(Boolean);
+  document.getElementById('matchAction').innerHTML = `<div class="card">
+    <label class="lbl">Corrigir autor do ${isOwn?'gol contra':'gol'}</label>
+    <select id="editGolSel">${players.map(p=>`<option value="${p.id}" ${p.id===ev.playerId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmarEdicaoGol(${eventIndex})">Salvar correção</button>
+      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+    </div></div>`;
+}
+async function confirmarEdicaoGol(eventIndex){
+  const m = getLiveMatch(); if(!m) return;
+  const ev = m.events[eventIndex]; if(!ev) return;
+  const novoId = document.getElementById('editGolSel').value;
+  if(novoId !== ev.playerId){
+    if(ev.type==='goal'){
+      const antigo = getPlayer(ev.playerId); if(antigo) antigo.goals = Math.max(0,(antigo.goals||0)-1);
+      const novo = getPlayer(novoId); if(novo) novo.goals = (novo.goals||0)+1;
+    }
+    ev.playerId = novoId;
+    await savePlayers();
+  }
+  document.getElementById('matchAction').innerHTML = '';
+  await saveSession(); render();
+}
+async function excluirEvento(eventIndex){
+  const m = getLiveMatch(); if(!m) return;
+  const ev = m.events[eventIndex]; if(!ev) return;
+  if(!confirm('Excluir esse evento? Isso desfaz o efeito dele no placar/estatísticas.')) return;
+  if(ev.type==='goal' || ev.type==='owngoal'){
+    if(ev.side==='A') m.scoreA = Math.max(0, m.scoreA-1); else m.scoreB = Math.max(0, m.scoreB-1);
+    if(ev.type==='goal'){ const p=getPlayer(ev.playerId); if(p) p.goals=Math.max(0,(p.goals||0)-1); }
+  } else if(ev.type==='assist'){
+    const p=getPlayer(ev.playerId); if(p) p.assists=Math.max(0,(p.assists||0)-1);
+  } else if(ev.type==='yellow'){
+    const p=getPlayer(ev.playerId); if(p) p.yellow=Math.max(0,(p.yellow||0)-1);
+    if(m.cardCounts) m.cardCounts[ev.playerId+'_y'] = Math.max(0,(m.cardCounts[ev.playerId+'_y']||1)-1);
+  } else if(ev.type==='blue'){
+    const p=getPlayer(ev.playerId); if(p) p.blue=Math.max(0,(p.blue||0)-1);
+  } else if(ev.type==='red'){
+    const p=getPlayer(ev.playerId); if(p) p.red=Math.max(0,(p.red||0)-1);
+  }
+  m.events.splice(eventIndex,1);
   document.getElementById('matchAction').innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
@@ -1381,11 +1478,9 @@ function gerarImagemRanking(){
   const vitorias = players.filter(p=>(p.wins||0)>0).sort((a,b)=>(b.wins||0)-(a.wins||0)).slice(0,5);
   const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0)
     .sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0))).slice(0,5);
-
   const classificacao = computeStandings().filter(t=>t.j>0);
 
   const sections = [
-    {title:'🏆 Classificação (J/V/E/D/SG/Pts)', icon:'🏆', rows: classificacao.map(t=>[t.nome, `${t.j}/${t.v}/${t.e}/${t.d}/${t.sg>0?'+':''}${t.sg}/${t.pts}pts`])},
     {title:'🥇 Artilharia', icon:'⚽', rows: artilheiros.map(p=>[p.name, String(p.goals||0)])},
     {title:'🎯 Garçons (assistências)', icon:'🎯', rows: garcons.map(p=>[p.name, String(p.assists||0)])},
     {title:'🏅 Mais vitórias', icon:'🏅', rows: vitorias.map(p=>[p.name, String(p.wins||0)])},
@@ -1394,14 +1489,19 @@ function gerarImagemRanking(){
 
   const W = 720;
   const headerH = 150;
+  const classifTitleH = classificacao.length>0 ? 36 : 0;
+  const classifHeaderH = classificacao.length>0 ? 30 : 0;
+  const classifRowH = 40;
+  const classifGap = classificacao.length>0 ? 22 : 0;
   const sectionTitleH = 44;
   const rowH = 38;
   const sectionGap = 16;
   const footerH = 46;
   let H = headerH;
+  H += classifTitleH + classifHeaderH + classificacao.length*classifRowH + classifGap;
   sections.forEach(s=> H += sectionTitleH + s.rows.length*rowH + sectionGap);
   H += footerH;
-  if(sections.length===0) H += 60;
+  if(sections.length===0 && classificacao.length===0) H += 60;
 
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -1427,9 +1527,70 @@ function gerarImagemRanking(){
   ctx.fillText(todayLabel(), W/2, 108);
 
   let y = headerH;
-  if(sections.length===0){
+
+  // tabela de classificação (colunas de verdade, igual ao app)
+  if(classificacao.length>0){
+    ctx.fillStyle = '#E4B93B';
+    ctx.font = 'bold 19px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🏆 Classificação', 30, y+24);
+    y += classifTitleH;
+
+    const tableX = 24, tableW = W-48;
+    const nameW = 300;
+    const statW = (tableW-nameW)/6;
+    const statCols = ['J','V','E','D','SG','PTS'];
+
+    // cabeçalho
+    ctx.fillStyle = '#8A8F98';
+    ctx.font = 'bold 12px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('TIME', tableX+42, y+20);
+    statCols.forEach((c,ci)=>{
+      ctx.textAlign = 'center';
+      ctx.fillText(c, tableX+nameW+statW*ci+statW/2, y+20);
+    });
+    y += classifHeaderH;
+
+    classificacao.forEach((t,i)=>{
+      if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(tableX,y,tableW,classifRowH); }
+      // posição
+      const posColors = ['#E4B93B','#c8ccc8','#c98a4e'];
+      if(i<3){
+        ctx.fillStyle = posColors[i];
+        roundRect(ctx, tableX+8, y+8, 24, 24, 6);
+        ctx.fill();
+        ctx.fillStyle = '#1a1305';
+        ctx.font = 'bold 13px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(i+1), tableX+20, y+25);
+      } else {
+        ctx.fillStyle = '#8A8F98';
+        ctx.font = 'bold 13px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(i+1)+'.', tableX+20, y+25);
+      }
+      ctx.fillStyle = '#F5F6F7';
+      ctx.font = i===0 ? 'bold 16px Arial, sans-serif' : '16px Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(t.nome, tableX+42, y+25, nameW-46);
+
+      const stats = [t.j, t.v, t.e, t.d, (t.sg>0?'+':'')+t.sg, t.pts];
+      stats.forEach((val,ci)=>{
+        ctx.fillStyle = ci===5 ? '#4CAF50' : (ci===4 && t.sg<0) ? '#E5484D' : ci===4 && t.sg>0 ? '#4CAF50' : '#F5F6F7';
+        ctx.font = ci===5 ? 'bold 17px Arial, sans-serif' : '15px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(val), tableX+nameW+statW*ci+statW/2, y+25);
+      });
+      y += classifRowH;
+    });
+    y += classifGap;
+  }
+
+  if(sections.length===0 && classificacao.length===0){
     ctx.fillStyle = '#565B63';
     ctx.font = 'italic 16px Arial, sans-serif';
+    ctx.textAlign = 'center';
     ctx.fillText('Ainda sem estatísticas registradas', W/2, y+30);
   }
   sections.forEach(sec=>{
