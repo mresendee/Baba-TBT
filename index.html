@@ -1041,6 +1041,28 @@ async function sortear(){
 }
 
 /* ================= PARTIDA ================= */
+let rodadaVisualizada = null;
+let editandoPartidaId = null;
+
+function getRodadaVisualizada(){
+  if(rodadaVisualizada===null) rodadaVisualizada = state.session.rodadaAtual || 1;
+  return rodadaVisualizada;
+}
+function navegarRodada(delta){
+  const nova = getRodadaVisualizada() + delta;
+  if(nova<1) return;
+  rodadaVisualizada = nova;
+  editandoPartidaId = null;
+  render();
+}
+async function comecarRodada(n){
+  if(getLiveMatch()){ alert('Encerre a partida ao vivo antes de avançar de rodada.'); return; }
+  state.session.rodadaAtual = n;
+  rodadaVisualizada = n;
+  await saveSession();
+  render();
+}
+
 function renderPartida(){
   const teams = state.session.teams;
   let html = `<div class="eyebrow">Partida</div>`;
@@ -1048,13 +1070,32 @@ function renderPartida(){
     html += `<div class="empty"><span class="icon">🎲</span><div class="msg">Sorteie os times primeiro na aba Sorteio.</div></div>`;
     return html;
   }
-  const live = state.session.matches.find(m=>!m.finished);
-  const rodadaAtual = state.session.rodadaAtual || 1;
+  const rodadaReal = state.session.rodadaAtual || 1;
+  const rv = getRodadaVisualizada();
+  const live = getLiveMatch();
 
-  html += `<div class="card row between" style="padding:10px 14px;">
-    <div><div class="name">Rodada ${rodadaAtual}</div><div class="meta">em andamento</div></div>
-    <button class="btn btn-outline btn-sm" onclick="proximaRodada()" ${live?'disabled':''}>Próxima rodada ▶</button>
+  html += `<div class="card row between" style="padding:10px 12px;">
+    <button class="btn btn-ghost btn-sm" onclick="navegarRodada(-1)" ${rv<=1?'disabled':''}>◀</button>
+    <div style="text-align:center;">
+      <div class="name">Rodada ${rv}</div>
+      <div class="meta">${rv===rodadaReal ? 'rodada atual' : rv<rodadaReal ? 'encerrada' : 'ainda não começou'}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="navegarRodada(1)">▶</button>
   </div>`;
+
+  if(rv < rodadaReal){
+    html += renderRodadaPassada(rv);
+    return html;
+  }
+  if(rv > rodadaReal){
+    html += `<div class="empty"><span class="icon">🗓️</span><div class="msg">A rodada ${rv} ainda não começou — será disputada em outro dia. Nada é salvo aqui até você começar ela de verdade.</div></div>`;
+    if(rv===rodadaReal+1 && !live){
+      html += `<button class="btn btn-primary btn-block" onclick="comecarRodada(${rv})">🏁 Começar rodada ${rv}</button>`;
+    }
+    return html;
+  }
+
+  // rv === rodadaReal: rodada em andamento
   if(live){
     html += `<div class="meta" style="text-align:center; margin-bottom:10px;">Encerre a partida ao vivo antes de avançar de rodada.</div>`;
   }
@@ -1069,63 +1110,92 @@ function renderPartida(){
       <button class="btn btn-primary btn-block" onclick="startMatch()">Iniciar partida</button>
     </div>`;
   } else {
-    const avgA = avgLevel(live.teamA), avgB = avgLevel(live.teamB);
-    html += `<div class="scoreboard"><div class="sb-teams">
-      <div class="sb-team"><div class="tname">${teamColorName(live.teamA)}</div><div class="sb-score">${live.scoreA}</div><div class="ovr">nível ${avgA}</div></div>
-      <div class="sb-x">×</div>
-      <div class="sb-team"><div class="tname">${teamColorName(live.teamB)}</div><div class="sb-score">${live.scoreB}</div><div class="ovr">nível ${avgB}</div></div>
-    </div></div>`;
-
-    html += `<div class="grid2" style="margin-bottom:8px;">
-      <button class="btn btn-outline" onclick="openGoal('A')">⚽ Gol ${teamColorName(live.teamA)}</button>
-      <button class="btn btn-outline" onclick="openGoal('B')">⚽ Gol ${teamColorName(live.teamB)}</button>
-    </div>
-    <div class="grid2" style="margin-bottom:10px;">
-      <button class="btn btn-outline" onclick="openCard('A')">🟨🟦🟥 Cartão ${teamColorName(live.teamA)}</button>
-      <button class="btn btn-outline" onclick="openCard('B')">🟨🟦🟥 Cartão ${teamColorName(live.teamB)}</button>
-    </div>
-    <button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="openOwnGoal()">🥅 Gol contra</button>
-    <div id="matchAction"></div>
-    <div class="card">
-      <div class="meta" style="margin-bottom:6px;">Eventos da partida <small>toque em ✏️ ou 🗑️ pra corrigir</small></div>
-      ${live.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' :
-        live.events.map((ev,idx)=>({ev,idx})).slice().reverse().map(({ev,idx})=>renderEventRowEditable(ev,idx)).join('')}
-    </div>
-    <button class="btn btn-primary btn-block" onclick="compartilharPartida('${live.id}')" style="margin-bottom:8px;">📤 Compartilhar placar (imagem)</button>
-    <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
+    html += renderScoreboard(live);
+    html += renderMatchEditor(live, true);
   }
 
-  const rodadas = agruparPorRodada(state.session.matches);
-  if(rodadas.length>0){
-    html += `<div class="eyebrow" style="margin-top:14px;">Rodadas <small>${rodadas.length} encerrada(s)</small></div>`;
-    rodadas.slice().reverse().forEach(r=>{
-      const dataFmt = new Date(r.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
-      const isHoje = r.date === todayKey();
-      html += `<div class="card">
-        <div class="row between" style="margin-bottom:8px;">
-          <span class="name">Rodada ${r.rodada} ${isHoje?'<span class="badge badge-conf">HOJE</span>':''}</span>
-          <span class="meta">${dataFmt}</span>
-        </div>`;
-      r.jogos.forEach(m=>{
-        html += `<div class="row between" style="padding:5px 0; border-top:1px dashed var(--line);">
-          <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
-          <span style="font-family:'Rajdhani'; font-weight:700; font-size:16px;">${m.scoreA} × ${m.scoreB}</span>
-          <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
-        </div>`;
-      });
-      html += `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" onclick="compartilharRodada(${r.rodada})">📤 Compartilhar rodada (imagem)</button>
-      </div>`;
-    });
+  const jogosDaRodada = state.session.matches.filter(m=>m.finished && (m.rodada||1)===rodadaReal);
+  if(jogosDaRodada.length>0){
+    html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas nesta rodada</div>`;
+    jogosDaRodada.forEach(m=> html += renderMatchSummaryCard(m));
+    html += `<button class="btn btn-ghost btn-block btn-sm" onclick="compartilharRodada(${rodadaReal})">📤 Compartilhar rodada (imagem)</button>`;
   }
+
   if(state.session.matches && state.session.matches.length>0){
     html += `<div class="divider"></div>
       <button class="btn btn-danger btn-block" onclick="zerarPartidas()">🗑️ Zerar partidas</button>`;
   }
   return html;
 }
+function renderRodadaPassada(rv){
+  const rodadas = agruparPorRodada(state.session.matches);
+  const info = rodadas.find(r=>r.rodada===rv);
+  let html = '';
+  if(!info || info.jogos.length===0){
+    html += `<div class="empty"><span class="icon">📅</span><div class="msg">Nenhuma partida registrada nessa rodada.</div></div>`;
+    return html;
+  }
+  const dataFmt = new Date(info.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  html += `<div class="meta" style="text-align:center; margin-bottom:10px;">Disputada em ${dataFmt}</div>`;
+  info.jogos.forEach(m=> html += renderMatchSummaryCard(m));
+  html += `<button class="btn btn-ghost btn-block btn-sm" onclick="compartilharRodada(${rv})">📤 Compartilhar rodada (imagem)</button>`;
+  return html;
+}
+function renderMatchSummaryCard(m){
+  const editing = editandoPartidaId===m.id;
+  let html = `<div class="card">
+    <div class="row between" ${editing?'style="margin-bottom:8px;"':''}>
+      <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+      <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
+      <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+    </div>`;
+  if(!editing){
+    html += `<div class="row" style="gap:8px; margin-top:8px;">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="editandoPartidaId='${m.id}'; render();">✏️ Editar esta partida</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="compartilharPartida('${m.id}')">📤 Compartilhar</button>
+    </div>`;
+  } else {
+    html += renderMatchEditor(m, false);
+    html += `<button class="btn btn-outline btn-block btn-sm" style="margin-top:8px;" onclick="editandoPartidaId=null; render();">Fechar edição</button>`;
+  }
+  html += `</div>`;
+  return html;
+}
+function renderScoreboard(m){
+  const avgA = avgLevel(m.teamA), avgB = avgLevel(m.teamB);
+  return `<div class="scoreboard"><div class="sb-teams">
+      <div class="sb-team"><div class="tname">${teamColorName(m.teamA)}</div><div class="sb-score">${m.scoreA}</div><div class="ovr">nível ${avgA}</div></div>
+      <div class="sb-x">×</div>
+      <div class="sb-team"><div class="tname">${teamColorName(m.teamB)}</div><div class="sb-score">${m.scoreB}</div><div class="ovr">nível ${avgB}</div></div>
+    </div></div>`;
+}
+function renderMatchEditor(m, isLive){
+  let html = `<div class="grid2" style="margin-bottom:8px;">
+      <button class="btn btn-outline" onclick="openGoal('${m.id}','A')">⚽ Gol ${teamColorName(m.teamA)}</button>
+      <button class="btn btn-outline" onclick="openGoal('${m.id}','B')">⚽ Gol ${teamColorName(m.teamB)}</button>
+    </div>
+    <div class="grid2" style="margin-bottom:10px;">
+      <button class="btn btn-outline" onclick="openCard('${m.id}','A')">🟨🟦🟥 Cartão ${teamColorName(m.teamA)}</button>
+      <button class="btn btn-outline" onclick="openCard('${m.id}','B')">🟨🟦🟥 Cartão ${teamColorName(m.teamB)}</button>
+    </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="openOwnGoal('${m.id}')">🥅 Gol contra</button>
+    <div id="matchAction_${m.id}"></div>
+    <div class="card">
+      <div class="meta" style="margin-bottom:6px;">Eventos da partida <small>toque em ✏️ ou 🗑️ pra corrigir</small></div>
+      ${m.events.length===0 ? '<div class="meta">Nenhum evento ainda.</div>' :
+        m.events.map((ev,idx)=>({ev,idx})).slice().reverse().map(({ev,idx})=>renderEventRowEditable(m.id,ev,idx)).join('')}
+    </div>
+    <button class="btn btn-primary btn-block" onclick="compartilharPartida('${m.id}')" style="margin-bottom:8px;">📤 Compartilhar placar (imagem)</button>`;
+  if(isLive){
+    html += `<button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
+  }
+  return html;
+}
 async function zerarPartidas(){
   if(!confirm('Isso vai apagar TODO o histórico de partidas (todas as rodadas, incluindo a partida ao vivo se houver) e zerar a tabela de classificação. Os times sorteados continuam salvos.\n\nAtenção: os gols, assistências, cartões e vitórias já contabilizados na aba Ranking NÃO são desfeitos automaticamente por essa ação. Se quiser zerar isso também, use o botão "Zerar ranking" na aba Ranking.\n\nContinuar?')) return;
   state.session.matches = [];
+  state.session.rodadaAtual = 1;
+  rodadaVisualizada = 1;
   await saveSession();
   render();
 }
@@ -1154,14 +1224,14 @@ function renderEventRow(ev){
   const [icon,label] = eventLabel(ev);
   return `<div class="evrow"><span>${icon}</span><span>${label}</span></div>`;
 }
-function renderEventRowEditable(ev, idx){
+function renderEventRowEditable(matchId, ev, idx){
   const [icon,label] = eventLabel(ev);
   const canEdit = ev.type==='goal' || ev.type==='owngoal';
   return `<div class="evrow" style="justify-content:space-between;">
     <span>${icon} ${label}</span>
     <span style="display:flex; gap:4px; flex-shrink:0;">
-      ${canEdit ? `<button class="btn btn-ghost btn-sm" style="padding:3px 8px; font-size:11px;" onclick="abrirEdicaoGol(${idx})">✏️</button>` : ''}
-      <button class="btn btn-danger btn-sm" style="padding:3px 8px; font-size:11px;" onclick="excluirEvento(${idx})">🗑️</button>
+      ${canEdit ? `<button class="btn btn-ghost btn-sm" style="padding:3px 8px; font-size:11px;" onclick="abrirEdicaoGol('${matchId}',${idx})">✏️</button>` : ''}
+      <button class="btn btn-danger btn-sm" style="padding:3px 8px; font-size:11px;" onclick="excluirEvento('${matchId}',${idx})">🗑️</button>
     </span>
   </div>`;
 }
@@ -1334,12 +1404,6 @@ async function compartilharRodada(rodadaNum){
   if(!r){ alert('Não encontrei essa rodada.'); return; }
   await compartilharImagemGenerica(gerarImagemRodada(r), `rodada-${rodadaNum}.png`, `Rodada ${rodadaNum}`);
 }
-async function proximaRodada(){
-  if(getLiveMatch()){ alert('Encerre a partida ao vivo antes de avançar de rodada.'); return; }
-  state.session.rodadaAtual = (state.session.rodadaAtual || 1) + 1;
-  await saveSession();
-  render();
-}
 async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
   const b = parseInt(document.getElementById('selTeamB').value);
@@ -1348,85 +1412,86 @@ async function startMatch(){
   await saveSession(); render();
 }
 function getLiveMatch(){ return state.session.matches.find(m=>!m.finished); }
-function openGoal(side){
-  const m = getLiveMatch(); if(!m) return;
+function actionDiv(matchId){ return document.getElementById('matchAction_'+matchId); }
+function openGoal(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
   const teamIdx = side==='A'?m.teamA:m.teamB;
   const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
-  document.getElementById('matchAction').innerHTML = `<div class="card">
+  actionDiv(matchId).innerHTML = `<div class="card">
     <label class="lbl">Quem marcou o gol? (${teamColorName(teamIdx)})</label>
-    <select id="scorerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <select id="scorerSel_${matchId}">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
     <label class="lbl" style="margin-top:10px;">Assistência (opcional)</label>
-    <select id="assistSel"><option value="">Sem assistência</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <select id="assistSel_${matchId}"><option value="">Sem assistência</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
     <div class="row" style="margin-top:12px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="confirmGoal('${side}')">Confirmar gol</button>
-      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmGoal('${matchId}','${side}')">Confirmar gol</button>
+      <button class="btn btn-outline" onclick="actionDiv('${matchId}').innerHTML=''">Cancelar</button>
     </div></div>`;
 }
-async function confirmGoal(side){
-  const m = getLiveMatch(); if(!m) return;
-  const scorerId = document.getElementById('scorerSel').value;
-  const assistId = document.getElementById('assistSel').value;
+async function confirmGoal(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
+  const scorerId = document.getElementById('scorerSel_'+matchId).value;
+  const assistId = document.getElementById('assistSel_'+matchId).value;
   if(side==='A') m.scoreA++; else m.scoreB++;
   m.events.push({type:'goal', playerId:scorerId, side});
   const scorer = getPlayer(scorerId); if(scorer) scorer.goals=(scorer.goals||0)+1;
   if(assistId){ m.events.push({type:'assist', playerId:assistId, side}); const a=getPlayer(assistId); if(a) a.assists=(a.assists||0)+1; }
-  document.getElementById('matchAction').innerHTML='';
+  actionDiv(matchId).innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
-function openOwnGoal(){
-  const m = getLiveMatch(); if(!m) return;
-  document.getElementById('matchAction').innerHTML = `<div class="card">
+function openOwnGoal(matchId){
+  const m = getMatchById(matchId); if(!m) return;
+  actionDiv(matchId).innerHTML = `<div class="card">
     <label class="lbl">Gol contra — de qual time é o jogador que marcou contra?</label>
     <div class="segrow">
-      <div class="seg on" id="ogTeamA" onclick="pickOwnGoalTeam('A')">${teamColorName(m.teamA)}</div>
-      <div class="seg" id="ogTeamB" onclick="pickOwnGoalTeam('B')">${teamColorName(m.teamB)}</div>
+      <div class="seg on" id="ogTeamA_${matchId}" onclick="pickOwnGoalTeam('${matchId}','A')">${teamColorName(m.teamA)}</div>
+      <div class="seg" id="ogTeamB_${matchId}" onclick="pickOwnGoalTeam('${matchId}','B')">${teamColorName(m.teamB)}</div>
     </div>
     <div class="meta" style="margin-bottom:8px;">O gol vai contar pro time adversário — escolha o jogador que desviou contra o próprio gol.</div>
-    <select id="ogPlayerSel"></select>
+    <select id="ogPlayerSel_${matchId}"></select>
     <div class="row" style="margin-top:12px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="confirmOwnGoal()">Confirmar gol contra</button>
-      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmOwnGoal('${matchId}')">Confirmar gol contra</button>
+      <button class="btn btn-outline" onclick="actionDiv('${matchId}').innerHTML=''">Cancelar</button>
     </div></div>`;
-  pickOwnGoalTeam('A');
+  pickOwnGoalTeam(matchId, 'A');
 }
 let ownGoalSide = 'A';
-function pickOwnGoalTeam(side){
-  const m = getLiveMatch(); if(!m) return;
+function pickOwnGoalTeam(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
   ownGoalSide = side;
-  document.getElementById('ogTeamA').classList.toggle('on', side==='A');
-  document.getElementById('ogTeamB').classList.toggle('on', side==='B');
+  document.getElementById('ogTeamA_'+matchId).classList.toggle('on', side==='A');
+  document.getElementById('ogTeamB_'+matchId).classList.toggle('on', side==='B');
   const teamIdx = side==='A' ? m.teamA : m.teamB;
   const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
-  document.getElementById('ogPlayerSel').innerHTML = players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('ogPlayerSel_'+matchId).innerHTML = players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
 }
-async function confirmOwnGoal(){
-  const m = getLiveMatch(); if(!m) return;
-  const playerId = document.getElementById('ogPlayerSel').value;
+async function confirmOwnGoal(matchId){
+  const m = getMatchById(matchId); if(!m) return;
+  const playerId = document.getElementById('ogPlayerSel_'+matchId).value;
   const beneficiado = ownGoalSide==='A' ? 'B' : 'A'; // time do jogador marca contra si, o outro time ganha o gol
   if(beneficiado==='A') m.scoreA++; else m.scoreB++;
   m.events.push({type:'owngoal', playerId, side:beneficiado});
-  document.getElementById('matchAction').innerHTML='';
+  actionDiv(matchId).innerHTML='';
   await saveSession(); render();
 }
-function abrirEdicaoGol(eventIndex){
-  const m = getLiveMatch(); if(!m) return;
+function abrirEdicaoGol(matchId, eventIndex){
+  const m = getMatchById(matchId); if(!m) return;
   const ev = m.events[eventIndex]; if(!ev) return;
   const isOwn = ev.type==='owngoal';
   const teamIdx = ev.side==='A' ? m.teamA : m.teamB;
   const teamParaSelecionar = isOwn ? (ev.side==='A' ? m.teamB : m.teamA) : teamIdx;
   const players = state.session.teams[teamParaSelecionar].players.map(getPlayer).filter(Boolean);
-  document.getElementById('matchAction').innerHTML = `<div class="card">
+  actionDiv(matchId).innerHTML = `<div class="card">
     <label class="lbl">Corrigir autor do ${isOwn?'gol contra':'gol'}</label>
-    <select id="editGolSel">${players.map(p=>`<option value="${p.id}" ${p.id===ev.playerId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+    <select id="editGolSel_${matchId}">${players.map(p=>`<option value="${p.id}" ${p.id===ev.playerId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
     <div class="row" style="margin-top:12px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="confirmarEdicaoGol(${eventIndex})">Salvar correção</button>
-      <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmarEdicaoGol('${matchId}',${eventIndex})">Salvar correção</button>
+      <button class="btn btn-outline" onclick="actionDiv('${matchId}').innerHTML=''">Cancelar</button>
     </div></div>`;
 }
-async function confirmarEdicaoGol(eventIndex){
-  const m = getLiveMatch(); if(!m) return;
+async function confirmarEdicaoGol(matchId, eventIndex){
+  const m = getMatchById(matchId); if(!m) return;
   const ev = m.events[eventIndex]; if(!ev) return;
-  const novoId = document.getElementById('editGolSel').value;
+  const novoId = document.getElementById('editGolSel_'+matchId).value;
   if(novoId !== ev.playerId){
     if(ev.type==='goal'){
       const antigo = getPlayer(ev.playerId); if(antigo) antigo.goals = Math.max(0,(antigo.goals||0)-1);
@@ -1435,11 +1500,11 @@ async function confirmarEdicaoGol(eventIndex){
     ev.playerId = novoId;
     await savePlayers();
   }
-  document.getElementById('matchAction').innerHTML = '';
+  actionDiv(matchId).innerHTML = '';
   await saveSession(); render();
 }
-async function excluirEvento(eventIndex){
-  const m = getLiveMatch(); if(!m) return;
+async function excluirEvento(matchId, eventIndex){
+  const m = getMatchById(matchId); if(!m) return;
   const ev = m.events[eventIndex]; if(!ev) return;
   if(!confirm('Excluir esse evento? Isso desfaz o efeito dele no placar/estatísticas.')) return;
   if(ev.type==='goal' || ev.type==='owngoal'){
@@ -1456,35 +1521,35 @@ async function excluirEvento(eventIndex){
     const p=getPlayer(ev.playerId); if(p) p.red=Math.max(0,(p.red||0)-1);
   }
   m.events.splice(eventIndex,1);
-  document.getElementById('matchAction').innerHTML='';
+  actionDiv(matchId).innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
-function openCard(side){
-  const m = getLiveMatch(); if(!m) return;
+function openCard(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
   const teamIdx = side==='A'?m.teamA:m.teamB;
   const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
-  document.getElementById('matchAction').innerHTML = `<div class="card">
+  actionDiv(matchId).innerHTML = `<div class="card">
     <label class="lbl">Cartão para quem? (${teamColorName(teamIdx)})</label>
-    <select id="cardPlayerSel">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <select id="cardPlayerSel_${matchId}">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
     <div class="segrow" style="margin-top:10px;">
-      <div class="seg on" id="cardYellowBtn" onclick="pickCardColor('yellow')">🟨 Amarelo</div>
-      <div class="seg" id="cardBlueBtn" onclick="pickCardColor('blue')">🟦 Azul</div>
-      <div class="seg" id="cardRedBtn" onclick="pickCardColor('red')">🟥 Vermelho</div>
+      <div class="seg on" id="cardYellowBtn_${matchId}" onclick="pickCardColor('${matchId}','yellow')">🟨 Amarelo</div>
+      <div class="seg" id="cardBlueBtn_${matchId}" onclick="pickCardColor('${matchId}','blue')">🟦 Azul</div>
+      <div class="seg" id="cardRedBtn_${matchId}" onclick="pickCardColor('${matchId}','red')">🟥 Vermelho</div>
     </div>
-    <div class="row"><button class="btn btn-primary" style="flex:1;" onclick="confirmCard('${side}')">Confirmar</button>
-    <button class="btn btn-outline" onclick="document.getElementById('matchAction').innerHTML=''">Cancelar</button></div></div>`;
+    <div class="row"><button class="btn btn-primary" style="flex:1;" onclick="confirmCard('${matchId}','${side}')">Confirmar</button>
+    <button class="btn btn-outline" onclick="actionDiv('${matchId}').innerHTML=''">Cancelar</button></div></div>`;
   pickCardColorVal='yellow';
 }
 let pickCardColorVal='yellow';
-function pickCardColor(c){
+function pickCardColor(matchId, c){
   pickCardColorVal=c;
-  document.getElementById('cardYellowBtn').classList.toggle('on',c==='yellow');
-  document.getElementById('cardBlueBtn').classList.toggle('on',c==='blue');
-  document.getElementById('cardRedBtn').classList.toggle('on',c==='red');
+  document.getElementById('cardYellowBtn_'+matchId).classList.toggle('on',c==='yellow');
+  document.getElementById('cardBlueBtn_'+matchId).classList.toggle('on',c==='blue');
+  document.getElementById('cardRedBtn_'+matchId).classList.toggle('on',c==='red');
 }
-async function confirmCard(side){
-  const m = getLiveMatch(); if(!m) return;
-  const playerId = document.getElementById('cardPlayerSel').value;
+async function confirmCard(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
+  const playerId = document.getElementById('cardPlayerSel_'+matchId).value;
   let type = pickCardColorVal;
   m.cardCounts = m.cardCounts||{};
   const prevY = m.cardCounts[playerId+'_y']||0;
@@ -1497,7 +1562,7 @@ async function confirmCard(side){
     else if(type==='blue') p.blue=(p.blue||0)+1;
     else p.red=(p.red||0)+1;
   }
-  document.getElementById('matchAction').innerHTML='';
+  actionDiv(matchId).innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
 async function finishMatch(){
