@@ -1084,21 +1084,48 @@ function renderPartida(){
     <button class="btn btn-danger btn-block" onclick="finishMatch()">Encerrar partida</button>`;
   }
 
-  const finished = state.session.matches.filter(m=>m.finished && m.date===todayKey());
-  if(finished.length>0){
-    html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas hoje</div>`;
-    finished.forEach(m=>{
+  const rodadas = agruparPorRodada(state.session.matches);
+  if(rodadas.length>0){
+    html += `<div class="eyebrow" style="margin-top:14px;">Rodadas <small>${rodadas.length} encerrada(s)</small></div>`;
+    rodadas.slice().reverse().forEach(r=>{
+      const dataFmt = new Date(r.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const isHoje = r.date === todayKey();
       html += `<div class="card">
         <div class="row between" style="margin-bottom:8px;">
+          <span class="name">Rodada ${r.rodada} ${isHoje?'<span class="badge badge-conf">HOJE</span>':''}</span>
+          <span class="meta">${dataFmt}</span>
+        </div>`;
+      r.jogos.forEach(m=>{
+        html += `<div class="row between" style="padding:5px 0; border-top:1px dashed var(--line);">
           <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
-          <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
+          <span style="font-family:'Rajdhani'; font-weight:700; font-size:16px;">${m.scoreA} × ${m.scoreB}</span>
           <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
-        </div>
-        <button class="btn btn-ghost btn-block btn-sm" onclick="compartilharPartida('${m.id}')">📤 Compartilhar (imagem)</button>
+        </div>`;
+      });
+      html += `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" onclick="compartilharRodada(${r.rodada})">📤 Compartilhar rodada (imagem)</button>
       </div>`;
     });
   }
+  if(state.session.matches && state.session.matches.length>0){
+    html += `<div class="divider"></div>
+      <button class="btn btn-danger btn-block" onclick="zerarPartidas()">🗑️ Zerar partidas</button>`;
+  }
   return html;
+}
+async function zerarPartidas(){
+  if(!confirm('Isso vai apagar TODO o histórico de partidas (todas as rodadas, incluindo a partida ao vivo se houver) e zerar a tabela de classificação. Os times sorteados continuam salvos.\n\nAtenção: os gols, assistências, cartões e vitórias já contabilizados na aba Ranking NÃO são desfeitos automaticamente por essa ação. Se quiser zerar isso também, use o botão "Zerar ranking" na aba Ranking.\n\nContinuar?')) return;
+  state.session.matches = [];
+  await saveSession();
+  render();
+}
+function agruparPorRodada(matches){
+  const finalizadas = (matches || []).filter(m=>m.finished);
+  const datasUnicas = [...new Set(finalizadas.map(m=>m.date))].sort();
+  return datasUnicas.map((date,i)=>({
+    rodada: i+1,
+    date,
+    jogos: finalizadas.filter(m=>m.date===date)
+  }));
 }
 function avgLevel(teamIdx){
   const team = state.session.teams[teamIdx]; if(!team || team.players.length===0) return 0;
@@ -1222,6 +1249,71 @@ async function compartilharPartida(matchId){
   const canvas = gerarImagemPartida(matchId);
   if(!canvas){ alert('Não encontrei essa partida.'); return; }
   await compartilharImagemGenerica(canvas, 'partida.png', 'Resultado da partida');
+}
+function gerarImagemRodada(rodadaInfo){
+  const jogos = rodadaInfo.jogos;
+  const W = 720;
+  const headerH = 150;
+  const rowH = 56;
+  const footerH = 46;
+  const H = headerH + Math.max(jogos.length,1)*rowH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#12171c');
+  grad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 30px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 50);
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText(`Rodada ${rodadaInfo.rodada}`, W/2, 82);
+
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '15px Arial, sans-serif';
+  const dataFmt = new Date(rodadaInfo.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  ctx.fillText(dataFmt, W/2, 108);
+
+  let y = headerH;
+  jogos.forEach((m,i)=>{
+    if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(24,y,W-48,rowH); }
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#F5F6F7';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.fillText(teamColorName(m.teamA), 40, y+34);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#E4B93B';
+    ctx.font = 'bold 24px Arial, sans-serif';
+    ctx.fillText(`${m.scoreA} × ${m.scoreB}`, W/2, y+36);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#F5F6F7';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.fillText(teamColorName(m.teamB), W-40, y+34);
+    y += rowH;
+  });
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharRodada(rodadaNum){
+  const rodadas = agruparPorRodada(state.session.matches);
+  const r = rodadas.find(x=>x.rodada===rodadaNum);
+  if(!r){ alert('Não encontrei essa rodada.'); return; }
+  await compartilharImagemGenerica(gerarImagemRodada(r), `rodada-${rodadaNum}.png`, `Rodada ${rodadaNum}`);
 }
 async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
