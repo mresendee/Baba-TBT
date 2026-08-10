@@ -1055,14 +1055,28 @@ function navegarRodada(delta){
   editandoPartidaId = null;
   render();
 }
-async function comecarRodada(n){
+async function comecarRodada(){
   if(getLiveMatch()){ alert('Encerre a partida ao vivo antes de avançar de rodada.'); return; }
-  state.session.rodadaAtual = n;
-  rodadaVisualizada = n;
+  state.session.rodadaAtual = (state.session.rodadaAtual || 1) + 1;
+  rodadaVisualizada = state.session.rodadaAtual;
+  await saveSession();
+  render();
+}
+async function corrigirNumeroRodada(){
+  const atual = state.session.rodadaAtual || 1;
+  const resposta = prompt('Corrigir o número da rodada atual.\n\nUse isso se o contador avançou errado (por exemplo, pulou rodadas que não aconteceram). Isso NÃO apaga nenhuma partida já jogada, só ajusta em qual rodada as novas partidas vão entrar a partir de agora.', atual);
+  if(resposta===null) return;
+  const novo = parseInt(resposta);
+  if(isNaN(novo) || novo<1){ alert('Digite um número válido (1 ou mais).'); return; }
+  state.session.rodadaAtual = novo;
+  rodadaVisualizada = novo;
   await saveSession();
   render();
 }
 
+function rodadaTemJogos(n){
+  return (state.session.matches||[]).some(m=>m.finished && (m.rodada||1)===n);
+}
 function renderPartida(){
   const teams = state.session.teams;
   let html = `<div class="eyebrow">Partida</div>`;
@@ -1074,14 +1088,20 @@ function renderPartida(){
   const rv = getRodadaVisualizada();
   const live = getLiveMatch();
 
+  let statusLabel;
+  if(rv===rodadaReal) statusLabel = 'rodada atual';
+  else if(rv<rodadaReal) statusLabel = rodadaTemJogos(rv) ? 'encerrada' : 'vazia (número pulado)';
+  else statusLabel = 'ainda não começou';
+
   html += `<div class="card row between" style="padding:10px 12px;">
     <button class="btn btn-ghost btn-sm" onclick="navegarRodada(-1)" ${rv<=1?'disabled':''}>◀</button>
     <div style="text-align:center;">
       <div class="name">Rodada ${rv}</div>
-      <div class="meta">${rv===rodadaReal ? 'rodada atual' : rv<rodadaReal ? 'encerrada' : 'ainda não começou'}</div>
+      <div class="meta">${statusLabel}</div>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="navegarRodada(1)">▶</button>
-  </div>`;
+  </div>
+  <div class="meta" style="text-align:center; margin-bottom:10px; cursor:pointer; color:var(--green-light);" onclick="corrigirNumeroRodada()">⚙️ corrigir número da rodada</div>`;
 
   if(rv < rodadaReal){
     html += renderRodadaPassada(rv);
@@ -1092,7 +1112,7 @@ function renderPartida(){
     if(live){
       html += `<div class="meta" style="text-align:center;">Encerre a partida ao vivo (na rodada ${rodadaReal}) antes de começar essa aqui.</div>`;
     } else {
-      html += `<button class="btn btn-primary btn-block" onclick="comecarRodada(${rv})">🏁 Começar rodada ${rv}</button>`;
+      html += `<button class="btn btn-primary btn-block" onclick="comecarRodada()">🏁 Começar rodada ${rodadaReal+1}</button>`;
     }
     return html;
   }
@@ -1134,7 +1154,7 @@ function renderRodadaPassada(rv){
   const info = rodadas.find(r=>r.rodada===rv);
   let html = '';
   if(!info || info.jogos.length===0){
-    html += `<div class="empty"><span class="icon">📅</span><div class="msg">Nenhuma partida registrada nessa rodada.</div></div>`;
+    html += `<div class="empty"><span class="icon">📅</span><div class="msg">Nenhuma partida registrada nessa rodada.<br>Se esse número foi pulado sem querer, use "⚙️ corrigir número da rodada" ali em cima.</div></div>`;
     return html;
   }
   const dataFmt = new Date(info.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
