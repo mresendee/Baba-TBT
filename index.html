@@ -1139,6 +1139,7 @@ function renderPartida(){
   const jogosDaRodada = state.session.matches.filter(m=>m.finished && (m.rodada||1)===rodadaReal);
   if(jogosDaRodada.length>0){
     html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas nesta rodada</div>`;
+    html += renderDestaqueRodadaCard(jogosDaRodada);
     jogosDaRodada.forEach(m=> html += renderMatchSummaryCard(m));
     html += `<button class="btn btn-ghost btn-block btn-sm" onclick="compartilharRodada(${rodadaReal})">📤 Compartilhar rodada (imagem)</button>`;
   }
@@ -1148,6 +1149,21 @@ function renderPartida(){
       <button class="btn btn-danger btn-block" onclick="zerarPartidas()">🗑️ Zerar partidas</button>`;
   }
   return html;
+}
+function destaqueDaRodada(jogos){
+  const todosEventos = [].concat(...jogos.map(m=>m.events||[]));
+  return calcularDestaque(todosEventos);
+}
+function renderDestaqueRodadaCard(jogos){
+  const destaque = destaqueDaRodada(jogos);
+  if(!destaque) return '';
+  const p = getPlayer(destaque.playerId);
+  if(!p) return '';
+  return `<div class="card" style="text-align:center; background:linear-gradient(135deg, rgba(228,185,59,0.15), rgba(228,185,59,0.03)); border-color:rgba(228,185,59,0.35);">
+    <div class="meta" style="margin-bottom:2px;">⭐ Destaque da rodada</div>
+    <div class="name" style="font-size:16px;">${escapeHtml(p.name)}</div>
+    <div class="meta">${destaque.gols}⚽  ${destaque.assist}🎯</div>
+  </div>`;
 }
 function renderRodadaPassada(rv){
   const rodadas = agruparPorRodada(state.session.matches);
@@ -1159,18 +1175,21 @@ function renderRodadaPassada(rv){
   }
   const dataFmt = new Date(info.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
   html += `<div class="meta" style="text-align:center; margin-bottom:10px;">Disputada em ${dataFmt}</div>`;
+  html += renderDestaqueRodadaCard(info.jogos);
   info.jogos.forEach(m=> html += renderMatchSummaryCard(m));
   html += `<button class="btn btn-ghost btn-block btn-sm" onclick="compartilharRodada(${rv})">📤 Compartilhar rodada (imagem)</button>`;
   return html;
 }
 function renderMatchSummaryCard(m){
   const editing = editandoPartidaId===m.id;
+  const destaque = calcularDestaque(m.events);
   let html = `<div class="card">
-    <div class="row between" ${editing?'style="margin-bottom:8px;"':''}>
+    <div class="row between" style="margin-bottom:4px;">
       <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
       <span style="font-family:'Rajdhani'; font-weight:700; font-size:18px;">${m.scoreA} × ${m.scoreB}</span>
       <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
-    </div>`;
+    </div>
+    ${destaque ? `<div class="meta" style="text-align:center; ${editing?'margin-bottom:8px;':''}">${destaqueLabel(destaque)}</div>` : ''}`;
   if(!editing){
     html += `<div class="row" style="gap:8px; margin-top:8px;">
       <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="editandoPartidaId='${m.id}'; render();">✏️ Editar esta partida</button>
@@ -1258,6 +1277,32 @@ function renderEventRowEditable(matchId, ev, idx){
   </div>`;
 }
 function getMatchById(matchId){ return state.session.matches.find(m=>m.id===matchId); }
+function calcularDestaque(events){
+  const pontos = {};
+  (events||[]).forEach(ev=>{
+    if(ev.type==='goal'){ pontos[ev.playerId] = pontos[ev.playerId] || {gols:0, assist:0}; pontos[ev.playerId].gols++; }
+    if(ev.type==='assist'){ pontos[ev.playerId] = pontos[ev.playerId] || {gols:0, assist:0}; pontos[ev.playerId].assist++; }
+  });
+  let melhor = null;
+  Object.keys(pontos).forEach(pid=>{
+    const s = pontos[pid];
+    const score = s.gols*2 + s.assist;
+    if(score<=0) return;
+    if(!melhor || score>melhor.score || (score===melhor.score && s.gols>melhor.gols)){
+      melhor = {playerId:pid, gols:s.gols, assist:s.assist, score};
+    }
+  });
+  return melhor;
+}
+function destaqueLabel(destaque){
+  if(!destaque) return '';
+  const p = getPlayer(destaque.playerId);
+  if(!p) return '';
+  const partes = [];
+  if(destaque.gols>0) partes.push(`${destaque.gols}⚽`);
+  if(destaque.assist>0) partes.push(`${destaque.assist}🎯`);
+  return `⭐ Destaque: ${escapeHtml(p.name)} (${partes.join(' ')})`;
+}
 function eventLabel(ev){
   const p = getPlayer(ev.playerId); const name = p ? p.name : '—';
   const map = {goal:['⚽',`Gol de ${name}`], owngoal:['🥅',`Gol contra de ${name}`], assist:['🎯',`Assistência de ${name}`], yellow:['🟨',`Cartão amarelo — ${name}`], blue:['🟦',`Cartão azul — ${name}`], red:['🟥',`Cartão vermelho — ${name}`]};
@@ -1266,14 +1311,16 @@ function eventLabel(ev){
 function gerarImagemPartida(matchId){
   const m = getMatchById(matchId); if(!m) return null;
   const events = m.events;
+  const destaque = calcularDestaque(events);
   const W = 720;
   const headerH = 110;
   const scoreboardH = 190;
+  const destaqueH = destaque ? 36 : 0;
   const rowH = 34;
   const eventsHeaderH = 40;
   const footerH = 46;
   const eventsAreaH = events.length>0 ? eventsHeaderH + events.length*rowH : 60;
-  const H = headerH + scoreboardH + eventsAreaH + footerH;
+  const H = headerH + scoreboardH + destaqueH + eventsAreaH + footerH;
 
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -1321,8 +1368,22 @@ function gerarImagemPartida(matchId){
   ctx.font = 'bold 26px Arial, sans-serif';
   ctx.fillText('×', W/2, midY+18);
 
+  // destaque da partida
+  if(destaque){
+    const p = getPlayer(destaque.playerId);
+    if(p){
+      ctx.fillStyle = '#E4B93B';
+      ctx.font = 'bold 17px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      const partes = [];
+      if(destaque.gols>0) partes.push(`${destaque.gols}⚽`);
+      if(destaque.assist>0) partes.push(`${destaque.assist}🎯`);
+      ctx.fillText(`⭐ Destaque: ${p.name} (${partes.join(' ')})`, W/2, headerH+scoreboardH+26);
+    }
+  }
+
   // eventos
-  let y = headerH + scoreboardH + 20;
+  let y = headerH + scoreboardH + destaqueH + 20;
   ctx.textAlign = 'left';
   if(events.length===0){
     ctx.fillStyle = '#565B63';
@@ -1363,11 +1424,13 @@ async function compartilharPartida(matchId){
 }
 function gerarImagemRodada(rodadaInfo){
   const jogos = rodadaInfo.jogos;
+  const destaque = destaqueDaRodada(jogos);
   const W = 720;
   const headerH = 150;
+  const destaqueH = destaque ? 46 : 0;
   const rowH = 56;
   const footerH = 46;
-  const H = headerH + Math.max(jogos.length,1)*rowH + footerH;
+  const H = headerH + destaqueH + Math.max(jogos.length,1)*rowH + footerH;
 
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -1394,6 +1457,19 @@ function gerarImagemRodada(rodadaInfo){
   ctx.fillText(dataFmt, W/2, 108);
 
   let y = headerH;
+  if(destaque){
+    const p = getPlayer(destaque.playerId);
+    if(p){
+      ctx.fillStyle = '#E4B93B';
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      const partes = [];
+      if(destaque.gols>0) partes.push(`${destaque.gols}⚽`);
+      if(destaque.assist>0) partes.push(`${destaque.assist}🎯`);
+      ctx.fillText(`⭐ Destaque da rodada: ${p.name} (${partes.join(' ')})`, W/2, y+28);
+    }
+    y += destaqueH;
+  }
   jogos.forEach((m,i)=>{
     if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(24,y,W-48,rowH); }
     ctx.textAlign = 'left';
@@ -1654,6 +1730,24 @@ function renderRanking(){
     if(classificacao.every(t=>t.j===0)){
       html += `<div class="meta" style="margin-top:8px;">Nenhuma partida encerrada ainda — a tabela atualiza sozinha conforme as partidas forem finalizadas na aba Partida.</div>`;
     }
+  }
+  html += `</div>`;
+
+  const rodadasComJogos = agruparPorRodada(state.session.matches);
+  html += `<div class="eyebrow">⭐ Destaques por rodada</div><div class="card">`;
+  if(rodadasComJogos.length===0){
+    html += `<div class="empty"><span class="icon">⭐</span><div class="msg">Ainda sem rodadas encerradas.</div></div>`;
+  } else {
+    html += rodadasComJogos.slice().reverse().map(r=>{
+      const destaque = destaqueDaRodada(r.jogos);
+      if(!destaque) return `<div class="row between" style="padding:6px 0; border-top:1px solid var(--line);"><span class="meta">Rodada ${r.rodada}</span><span class="meta">sem destaque (sem gols/assistências)</span></div>`;
+      const p = getPlayer(destaque.playerId);
+      if(!p) return '';
+      return `<div class="row between" style="padding:6px 0; border-top:1px solid var(--line);">
+        <span class="meta">Rodada ${r.rodada}</span>
+        <span class="name" style="font-size:13px;">${escapeHtml(p.name)} <span class="meta">(${destaque.gols}⚽ ${destaque.assist}🎯)</span></span>
+      </div>`;
+    }).join('');
   }
   html += `</div>`;
 
