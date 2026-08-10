@@ -1089,7 +1089,9 @@ function renderPartida(){
   }
   if(rv > rodadaReal){
     html += `<div class="empty"><span class="icon">🗓️</span><div class="msg">A rodada ${rv} ainda não começou — será disputada em outro dia. Nada é salvo aqui até você começar ela de verdade.</div></div>`;
-    if(rv===rodadaReal+1 && !live){
+    if(live){
+      html += `<div class="meta" style="text-align:center;">Encerre a partida ao vivo (na rodada ${rodadaReal}) antes de começar essa aqui.</div>`;
+    } else {
       html += `<button class="btn btn-primary btn-block" onclick="comecarRodada(${rv})">🏁 Começar rodada ${rv}</button>`;
     }
     return html;
