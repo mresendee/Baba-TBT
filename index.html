@@ -260,6 +260,7 @@ function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47','#C039
 function setTab(tab){
   currentTab = tab;
   perfilAberto = null;
+  resumoAnualAberto = false;
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===tab));
   refreshData();
 }
@@ -273,20 +274,71 @@ async function refreshData(){
   render();
 }
 let perfilAberto = null;
+let resumoAnualAberto = false;
 function abrirPerfil(playerId){ perfilAberto = playerId; render(); }
 function fecharPerfil(){ perfilAberto = null; render(); }
+function abrirResumoAnual(){ resumoAnualAberto = true; render(); }
+function fecharResumoAnual(){ resumoAnualAberto = false; render(); }
 function render(){
   document.getElementById('dateSub').textContent = todayLabel();
   document.getElementById('groupName').textContent = state.settings.groupName;
   const view = document.getElementById('view');
   if(!state.loaded){ view.innerHTML = '<div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>'; return; }
   if(perfilAberto){ view.innerHTML = renderPerfilJogador(perfilAberto); return; }
+  if(resumoAnualAberto){ view.innerHTML = renderResumoAnual(); return; }
   if(currentTab==='elenco') view.innerHTML = renderElenco();
   else if(currentTab==='chegada') view.innerHTML = renderChegada();
   else if(currentTab==='sorteio') view.innerHTML = renderSorteio();
   else if(currentTab==='partida') view.innerHTML = renderPartida();
   else if(currentTab==='ranking') view.innerHTML = renderRanking();
   else if(currentTab==='financeiro'){ view.innerHTML = renderFinanceiro(); desenharQrPix(); }
+}
+function renderResumoAnual(){
+  const mk = currentFinanceiroMonth();
+  const year = mk.split('-')[0];
+  const players = state.players.filter(p=>!p.guest).sort((a,b)=>a.name.localeCompare(b.name));
+  let html = `<button class="btn btn-ghost btn-sm" onclick="fecharResumoAnual()">← Voltar</button>`;
+  html += `<div class="eyebrow" style="margin-top:10px;">Resumo de ${year} <small>todos os associados</small></div>`;
+
+  if(players.length===0){
+    html += `<div class="empty"><span class="icon">💰</span><div class="msg">Cadastre associados na aba Elenco primeiro.</div></div>`;
+    return html;
+  }
+
+  let emDia=0, comPendencia=0;
+  const linhas = players.map(p=>{
+    const duesAno = (p.dues||[]).filter(d=>d.month && d.month.startsWith(year+'-'));
+    const pagos = duesAno.filter(d=>d.status==='pago');
+    const pendentes = duesAno.filter(d=>d.status!=='pago');
+    const valorPago = pagos.reduce((s,d)=>s+d.value,0);
+    const valorPendente = pendentes.reduce((s,d)=>s+d.value,0);
+    if(duesAno.length>0 && pendentes.length===0) emDia++;
+    else if(pendentes.length>0) comPendencia++;
+    return { p, mesesPagos:pagos.length, mesesPendentes:pendentes.length, valorPago, valorPendente, temCobranca:duesAno.length>0 };
+  });
+
+  html += `<div class="pillrow">
+    <div class="pill"><div class="v">${emDia}</div><div class="l">Em dia</div></div>
+    <div class="pill"><div class="v">${comPendencia}</div><div class="l">Com pendência</div></div>
+    <div class="pill"><div class="v">R$${linhas.reduce((s,l)=>s+l.valorPago,0)}</div><div class="l">Total recebido</div></div>
+  </div>`;
+
+  linhas.sort((a,b)=> b.mesesPendentes - a.mesesPendentes || a.p.name.localeCompare(b.p.name));
+  html += `<div class="card">`;
+  linhas.forEach(l=>{
+    html += `<div class="row between" style="padding:8px 0; border-top:1px solid var(--line);">
+      <div>
+        <div class="name" style="font-size:14px; cursor:pointer; text-decoration:underline dotted;" onclick="abrirPerfil('${l.p.id}')">${escapeHtml(l.p.name)}</div>
+        <div class="meta">${l.temCobranca ? `${l.mesesPagos} pago(s) · ${l.mesesPendentes} pendente(s)` : 'sem cobrança lançada no ano'}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="meta" style="color:var(--green-light);">R$${l.valorPago}</div>
+        ${l.valorPendente>0 ? `<div class="meta" style="color:var(--gold);">R$${l.valorPendente} em aberto</div>` : ''}
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
 }
 function renderPerfilJogador(playerId){
   const p = getPlayer(playerId);
@@ -315,7 +367,8 @@ function renderPerfilJogador(playerId){
     html += `<div class="eyebrow">🧤 Como goleiro</div>
     <div class="pillrow">
       <div class="pill"><div class="v">${p.gamesAsGK||0}</div><div class="l">Jogos no gol</div></div>
-      <div class="pill"><div class="v">${p.cleanSheets||0}</div><div class="l">Sem sofrer gol</div></div>
+      <div class="pill"><div class="v">${p.goalsConceded||0}</div><div class="l">Sofridos</div></div>
+      <div class="pill"><div class="v">${p.cleanSheets||0}</div><div class="l">Sem sofrer</div></div>
     </div>`;
   }
   if(!p.guest){
@@ -327,10 +380,95 @@ function renderPerfilJogador(playerId){
       ${due ? statusBadge2(due.status) : ''}
     </div>`;
   }
+  html += `<button class="btn btn-primary btn-block" style="margin-top:6px;" onclick="compartilharPerfil('${p.id}')">📤 Compartilhar desempenho (imagem)</button>`;
   return html;
 }
 function statusBadge2(status){
   return status==='pago' ? '<span class="badge badge-conf">Pago</span>' : '<span class="badge badge-wait">Pendente</span>';
+}
+function gerarImagemPerfil(playerId){
+  const p = getPlayer(playerId); if(!p) return null;
+  const pct = (p.matchesPlayed||0)>0 ? Math.round((p.wins||0)/p.matchesPlayed*100) : 0;
+  const isGK = p.position==='GOL';
+  const W = 720;
+  const headerH = 170;
+  const rowH = 44;
+  const numRows = 6 + (isGK?3:0);
+  const footerH = 46;
+  const H = headerH + numRows*rowH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#12171c');
+  grad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 26px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 42);
+
+  const tierColors = {Bronze:'#A0522D', Prata:'#B0B7BD', Ouro:'#E4B93B', Platina:'#5FC9BE', Elite:'#8B5CF6'};
+  const tc = tierColors[tierOf(p.level)] || '#8A8F98';
+  ctx.strokeStyle = tc;
+  ctx.lineWidth = 2.5;
+  roundRect(ctx, W/2-32, 56, 64, 56, 10);
+  ctx.stroke();
+  ctx.fillStyle = tc;
+  ctx.font = 'bold 26px Arial, sans-serif';
+  ctx.fillText(String(p.level), W/2, 90);
+  ctx.font = 'bold 11px Arial, sans-serif';
+  ctx.fillText(tierOf(p.level).toUpperCase(), W/2, 105);
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 24px Arial, sans-serif';
+  ctx.fillText(p.name, W/2, 140);
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '14px Arial, sans-serif';
+  ctx.fillText(`${p.position}${isGK?' 🧤':''} · ${p.guest?'Convidado':'Associado'}`, W/2, 160);
+
+  const linhas = [
+    ['Jogos', p.matchesPlayed||0],
+    ['Gols', p.goals||0],
+    ['Assistências', p.assists||0],
+    ['Vitórias', p.wins||0],
+    ['Aproveitamento', pct+'%'],
+    ['Cartões (🟨🟦🟥)', `${p.yellow||0} · ${p.blue||0} · ${p.red||0}`],
+  ];
+  if(isGK){
+    linhas.push(['Jogos no gol', p.gamesAsGK||0]);
+    linhas.push(['Gols sofridos', p.goalsConceded||0]);
+    linhas.push(['Sem sofrer gol', p.cleanSheets||0]);
+  }
+
+  let y = headerH;
+  linhas.forEach((l,i)=>{
+    if(i%2===0){ ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(24,y,W-48,rowH); }
+    ctx.fillStyle = '#8A8F98';
+    ctx.font = '16px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(l[0], 42, y+28);
+    ctx.fillStyle = '#E4B93B';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(l[1]), W-42, y+28);
+    y += rowH;
+  });
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharPerfil(playerId){
+  const canvas = gerarImagemPerfil(playerId);
+  if(!canvas){ alert('Não encontrei esse jogador.'); return; }
+  await compartilharImagemGenerica(canvas, 'desempenho.png', 'Desempenho');
 }
 function renameGroup(){
   const n = prompt('Nome da pelada:', state.settings.groupName);
@@ -1204,16 +1342,51 @@ function destaqueDaRodada(jogos){
   const todosEventos = [].concat(...jogos.map(m=>m.events||[]));
   return calcularDestaque(todosEventos);
 }
+function golsSofridosNaRodada(jogos){
+  const porGoleiro = {};
+  jogos.forEach(m=>{
+    const teamA = state.session.teams[m.teamA]; const teamB = state.session.teams[m.teamB];
+    const goleirosA = teamA ? teamA.players.map(getPlayer).filter(p=>p && p.position==='GOL') : [];
+    const goleirosB = teamB ? teamB.players.map(getPlayer).filter(p=>p && p.position==='GOL') : [];
+    goleirosA.forEach(p=>{ porGoleiro[p.id] = (porGoleiro[p.id]||0) + m.scoreB; });
+    goleirosB.forEach(p=>{ porGoleiro[p.id] = (porGoleiro[p.id]||0) + m.scoreA; });
+  });
+  return porGoleiro;
+}
+function melhorGoleiroDaRodada(jogos){
+  const porGoleiro = golsSofridosNaRodada(jogos);
+  let melhor = null;
+  Object.keys(porGoleiro).forEach(pid=>{
+    const sofridos = porGoleiro[pid];
+    if(!melhor || sofridos < melhor.sofridos) melhor = {playerId:pid, sofridos};
+  });
+  return melhor;
+}
 function renderDestaqueRodadaCard(jogos){
   const destaque = destaqueDaRodada(jogos);
-  if(!destaque) return '';
-  const p = getPlayer(destaque.playerId);
-  if(!p) return '';
-  return `<div class="card" style="text-align:center; background:linear-gradient(135deg, rgba(228,185,59,0.15), rgba(228,185,59,0.03)); border-color:rgba(228,185,59,0.35);">
-    <div class="meta" style="margin-bottom:2px;">⭐ Destaque da rodada</div>
-    <div class="name" style="font-size:16px;">${escapeHtml(p.name)}</div>
-    <div class="meta">${destaque.gols}⚽  ${destaque.assist}🎯</div>
-  </div>`;
+  const melhorGoleiro = melhorGoleiroDaRodada(jogos);
+  let html = '';
+  if(destaque){
+    const p = getPlayer(destaque.playerId);
+    if(p){
+      html += `<div class="card" style="text-align:center; background:linear-gradient(135deg, rgba(228,185,59,0.15), rgba(228,185,59,0.03)); border-color:rgba(228,185,59,0.35);">
+        <div class="meta" style="margin-bottom:2px;">⭐ Destaque da rodada</div>
+        <div class="name" style="font-size:16px;">${escapeHtml(p.name)}</div>
+        <div class="meta">${destaque.gols}⚽  ${destaque.assist}🎯</div>
+      </div>`;
+    }
+  }
+  if(melhorGoleiro){
+    const p = getPlayer(melhorGoleiro.playerId);
+    if(p){
+      html += `<div class="card" style="text-align:center; background:linear-gradient(135deg, rgba(61,143,179,0.15), rgba(61,143,179,0.03)); border-color:rgba(61,143,179,0.35);">
+        <div class="meta" style="margin-bottom:2px;">🧤 Goleiro da rodada <small>menos gols sofridos</small></div>
+        <div class="name" style="font-size:16px;">${escapeHtml(p.name)}</div>
+        <div class="meta">${melhorGoleiro.sofridos} gol(s) sofrido(s) na rodada</div>
+      </div>`;
+    }
+  }
+  return html;
 }
 function renderRodadaPassada(rv){
   const rodadas = agruparPorRodada(state.session.matches);
@@ -1767,13 +1940,13 @@ async function finishMatch(){
     const p=getPlayer(pid); if(!p) return;
     p.matchesPlayed=(p.matchesPlayed||0)+1;
     if(winner==='A') p.wins=(p.wins||0)+1;
-    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreB===0) p.cleanSheets=(p.cleanSheets||0)+1; }
+    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreB===0) p.cleanSheets=(p.cleanSheets||0)+1; p.goalsConceded=(p.goalsConceded||0)+m.scoreB; }
   });
   teamB.forEach(pid=>{
     const p=getPlayer(pid); if(!p) return;
     p.matchesPlayed=(p.matchesPlayed||0)+1;
     if(winner==='B') p.wins=(p.wins||0)+1;
-    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreA===0) p.cleanSheets=(p.cleanSheets||0)+1; }
+    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreA===0) p.cleanSheets=(p.cleanSheets||0)+1; p.goalsConceded=(p.goalsConceded||0)+m.scoreA; }
   });
   await saveSession(); await savePlayers(); render();
 }
@@ -1903,8 +2076,8 @@ function renderRanking(){
   const goleiros = players.filter(p=>(p.gamesAsGK||0)>0).sort((a,b)=>(b.cleanSheets||0)-(a.cleanSheets||0));
   html += `<div class="eyebrow">🧤 Goleiros <small>jogos sem sofrer gol</small></div><div class="card">${
     goleiros.length===0 ? '<div class="empty"><span class="icon">🧤</span><div class="msg">Nenhum goleiro com partidas encerradas ainda.</div></div>'
-    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Sem sofrer</th></tr></thead><tbody>
-        ${goleiros.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num">${p.cleanSheets||0}</td></tr>`).join('')}
+    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Sofridos</th><th style="text-align:center;">Sem sofrer</th></tr></thead><tbody>
+        ${goleiros.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.goalsConceded||0}</td><td class="num">${p.cleanSheets||0}</td></tr>`).join('')}
       </tbody></table>`
   }</div>`;
   html += `<div class="eyebrow">📈 Melhor aproveitamento <small>mín. 3 jogos</small></div><div class="card">${
@@ -2080,7 +2253,7 @@ async function zerarRanking(){
   if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias, jogos disputados e estatísticas de goleiro. Essa ação não pode ser desfeita. Continuar?')) return;
   state.players.forEach(p=>{
     p.goals = 0; p.assists = 0; p.yellow = 0; p.blue = 0; p.red = 0; p.wins = 0; p.matchesPlayed = 0;
-    p.gamesAsGK = 0; p.cleanSheets = 0;
+    p.gamesAsGK = 0; p.cleanSheets = 0; p.goalsConceded = 0;
   });
   await savePlayers();
   render();
@@ -2183,6 +2356,72 @@ async function copiarCodigoPix(){
     alert('Não consegui copiar automaticamente. Toque e segure no código pra copiar manualmente.');
   }
 }
+function gerarImagemCobranca(playerId){
+  const p = getPlayer(playerId); if(!p) return null;
+  const mk = currentFinanceiroMonth();
+  const due = (p.dues||[]).find(d=>d.month===mk);
+  if(!due) return null;
+  const W = 720;
+  const headerH = 150;
+  const qrSize = 280;
+  const footerH = 110;
+  const H = headerH + qrSize + 40 + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#12171c');
+  grad.addColorStop(1, '#0a0d10');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4CAF50';
+  ctx.font = 'bold 28px Arial, sans-serif';
+  ctx.fillText(state.settings.groupName || 'Pelada', W/2, 46);
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText('Cobrança Pix', W/2, 78);
+
+  ctx.fillStyle = '#8A8F98';
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillText(`${p.name} · ${labelForMonth(mk)}`, W/2, 105);
+
+  ctx.fillStyle = '#E4B93B';
+  ctx.font = 'bold 30px Arial, sans-serif';
+  ctx.fillText(`R$ ${due.value}`, W/2, 140);
+
+  const qrCanvas = document.querySelector('#qrcode-container canvas');
+  const qrX = (W-qrSize)/2, qrY = headerH;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(qrX-12, qrY-12, qrSize+24, qrSize+24);
+  if(qrCanvas){
+    ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+  } else {
+    ctx.fillStyle = '#999';
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText('QR indisponível', W/2, qrY+qrSize/2);
+  }
+
+  ctx.fillStyle = '#F5F6F7';
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillText('Escaneie com o app do seu banco', W/2, qrY+qrSize+40);
+  ctx.fillText('ou use "Pix Copia e Cola"', W/2, qrY+qrSize+62);
+
+  ctx.fillStyle = '#565B63';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.fillText('Gerado pelo app da pelada', W/2, H-18);
+
+  return canvas;
+}
+async function compartilharCobranca(){
+  if(!qrPixAberto) return;
+  const canvas = gerarImagemCobranca(qrPixAberto.playerId);
+  if(!canvas){ alert('Não encontrei essa cobrança.'); return; }
+  await compartilharImagemGenerica(canvas, 'cobranca-pix.png', 'Cobrança Pix');
+}
 function renderFinanceiro(){
   const mk = currentFinanceiroMonth();
   const isCurrent = mk === monthKey();
@@ -2243,6 +2482,7 @@ function renderFinanceiro(){
   </div>`;
 
   html += `<div class="eyebrow">Mensalidades <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
+  html += `<button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="abrirResumoAnual()">📊 Ver resumo do ano (todos, pendentes e pagos)</button>`;
   html += `<div class="row between" style="margin-bottom:10px; align-items:flex-start;">
     <div class="meta" style="flex:1;">Convidados não entram nessa lista automaticamente — só associados têm mensalidade por padrão.</div>
     <button class="btn btn-ghost btn-sm" style="flex-shrink:0; margin-left:8px;" onclick="configurarPix()">⚙️ Configurar Pix</button>
@@ -2253,6 +2493,7 @@ function renderFinanceiro(){
       <div class="name" style="margin-bottom:10px;">QR Pix — ${pQr?escapeHtml(pQr.name):''}</div>
       <div id="qrcode-container" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
       <button class="btn btn-outline btn-block btn-sm" style="margin-bottom:6px;" onclick="copiarCodigoPix()">📋 Copiar código Pix</button>
+      <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:6px;" onclick="compartilharCobranca()">📤 Compartilhar cobrança (imagem)</button>
       <button class="btn btn-ghost btn-block btn-sm" onclick="fecharQrPix()">Fechar</button>
     </div>`;
   }
