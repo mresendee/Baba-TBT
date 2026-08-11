@@ -15,6 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{
   --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
@@ -258,6 +259,7 @@ function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47','#C039
 /* ================= RENDER DISPATCH ================= */
 function setTab(tab){
   currentTab = tab;
+  perfilAberto = null;
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===tab));
   refreshData();
 }
@@ -270,17 +272,65 @@ async function refreshData(){
   }catch(e){ console.warn('Não consegui atualizar agora', e); }
   render();
 }
+let perfilAberto = null;
+function abrirPerfil(playerId){ perfilAberto = playerId; render(); }
+function fecharPerfil(){ perfilAberto = null; render(); }
 function render(){
   document.getElementById('dateSub').textContent = todayLabel();
   document.getElementById('groupName').textContent = state.settings.groupName;
   const view = document.getElementById('view');
   if(!state.loaded){ view.innerHTML = '<div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>'; return; }
+  if(perfilAberto){ view.innerHTML = renderPerfilJogador(perfilAberto); return; }
   if(currentTab==='elenco') view.innerHTML = renderElenco();
   else if(currentTab==='chegada') view.innerHTML = renderChegada();
   else if(currentTab==='sorteio') view.innerHTML = renderSorteio();
   else if(currentTab==='partida') view.innerHTML = renderPartida();
   else if(currentTab==='ranking') view.innerHTML = renderRanking();
-  else if(currentTab==='financeiro') view.innerHTML = renderFinanceiro();
+  else if(currentTab==='financeiro'){ view.innerHTML = renderFinanceiro(); desenharQrPix(); }
+}
+function renderPerfilJogador(playerId){
+  const p = getPlayer(playerId);
+  if(!p) return `<button class="btn btn-ghost btn-sm" onclick="fecharPerfil()">← Voltar</button><div class="empty" style="margin-top:10px;"><span class="icon">👤</span><div class="msg">Jogador não encontrado.</div></div>`;
+  const pct = (p.matchesPlayed||0)>0 ? Math.round((p.wins||0)/p.matchesPlayed*100) : 0;
+  let html = `<button class="btn btn-ghost btn-sm" onclick="fecharPerfil()">← Voltar</button>`;
+  html += `<div class="card" style="text-align:center; margin-top:10px;">
+    <div style="display:flex; justify-content:center; margin-bottom:8px;">${overallBadge(p)}</div>
+    <div class="name" style="font-size:18px;">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
+    <div class="meta" style="margin-top:2px;">${p.position==='GOL'?'🧤 ':''}${p.position} · ${p.guest?'Convidado':'Associado'}</div>
+    <div style="margin-top:8px;">${statusBadge(p.status)}</div>
+  </div>`;
+  html += `<div class="pillrow">
+    <div class="pill"><div class="v">${p.matchesPlayed||0}</div><div class="l">Jogos</div></div>
+    <div class="pill"><div class="v">${p.goals||0}</div><div class="l">Gols</div></div>
+    <div class="pill"><div class="v">${p.assists||0}</div><div class="l">Assist.</div></div>
+    <div class="pill"><div class="v">${pct}%</div><div class="l">Aproveit.</div></div>
+  </div>`;
+  html += `<div class="pillrow">
+    <div class="pill"><div class="v">${p.wins||0}</div><div class="l">Vitórias</div></div>
+    <div class="pill"><div class="v">${p.yellow||0}</div><div class="l">🟨</div></div>
+    <div class="pill"><div class="v">${p.blue||0}</div><div class="l">🟦</div></div>
+    <div class="pill"><div class="v">${p.red||0}</div><div class="l">🟥</div></div>
+  </div>`;
+  if(p.position==='GOL'){
+    html += `<div class="eyebrow">🧤 Como goleiro</div>
+    <div class="pillrow">
+      <div class="pill"><div class="v">${p.gamesAsGK||0}</div><div class="l">Jogos no gol</div></div>
+      <div class="pill"><div class="v">${p.cleanSheets||0}</div><div class="l">Sem sofrer gol</div></div>
+    </div>`;
+  }
+  if(!p.guest){
+    const mk = currentFinanceiroMonth();
+    const due = (p.dues||[]).find(d=>d.month===mk);
+    html += `<div class="eyebrow">Mensalidade <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>
+    <div class="card row between">
+      <span class="meta">${due ? `R$${due.value} · ${due.method}` : 'Sem cobrança lançada'}</span>
+      ${due ? statusBadge2(due.status) : ''}
+    </div>`;
+  }
+  return html;
+}
+function statusBadge2(status){
+  return status==='pago' ? '<span class="badge badge-conf">Pago</span>' : '<span class="badge badge-wait">Pendente</span>';
 }
 function renameGroup(){
   const n = prompt('Nome da pelada:', state.settings.groupName);
@@ -377,7 +427,7 @@ function renderElenco(){
         <div class="row">
           ${overallBadge(p)}
           <div>
-            <div class="name">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
+            <div class="name" style="cursor:pointer; text-decoration:underline dotted;" onclick="abrirPerfil('${p.id}')">${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
             <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0} 🟨${p.yellow||0} 🟦${p.blue||0} 🟥${p.red||0}</div>
             <div style="margin-top:4px;">${statusBadge(p.status)}</div>
           </div>
@@ -1202,13 +1252,57 @@ function renderMatchSummaryCard(m){
   html += `</div>`;
   return html;
 }
+function formatTimer(seconds){
+  const mm = Math.floor(seconds/60), ss = seconds%60;
+  return String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+}
+function currentTimerSeconds(m){
+  let secs = m.timerSeconds||0;
+  if(m.timerRunning && m.timerStartedAt) secs += Math.floor((Date.now()-m.timerStartedAt)/1000);
+  return secs;
+}
+async function toggleTimer(matchId){
+  const m = getMatchById(matchId); if(!m) return;
+  if(m.timerRunning){
+    m.timerSeconds = currentTimerSeconds(m);
+    m.timerRunning = false;
+    m.timerStartedAt = null;
+  } else {
+    m.timerRunning = true;
+    m.timerStartedAt = Date.now();
+  }
+  await saveSession();
+  render();
+}
+async function resetTimer(matchId){
+  const m = getMatchById(matchId); if(!m) return;
+  if(!confirm('Zerar o cronômetro dessa partida?')) return;
+  m.timerSeconds = 0;
+  m.timerRunning = false;
+  m.timerStartedAt = null;
+  await saveSession();
+  render();
+}
+setInterval(()=>{
+  const m = getLiveMatch ? getLiveMatch() : null;
+  if(m && m.timerRunning){
+    const el = document.getElementById('timerDisplay_'+m.id);
+    if(el) el.textContent = formatTimer(currentTimerSeconds(m));
+  }
+}, 1000);
 function renderScoreboard(m){
   const avgA = avgLevel(m.teamA), avgB = avgLevel(m.teamB);
   return `<div class="scoreboard"><div class="sb-teams">
       <div class="sb-team"><div class="tname">${teamColorName(m.teamA)}</div><div class="sb-score">${m.scoreA}</div><div class="ovr">nível ${avgA}</div></div>
       <div class="sb-x">×</div>
       <div class="sb-team"><div class="tname">${teamColorName(m.teamB)}</div><div class="sb-score">${m.scoreB}</div><div class="ovr">nível ${avgB}</div></div>
-    </div></div>`;
+    </div>
+    <div class="row" style="justify-content:center; align-items:center; gap:12px; margin-top:14px;">
+      <span id="timerDisplay_${m.id}" style="font-family:'Rajdhani',sans-serif; font-size:28px; font-weight:700; color:var(--gold); letter-spacing:1px;">${formatTimer(currentTimerSeconds(m))}</span>
+      <button class="btn btn-sm ${m.timerRunning?'btn-danger':'btn-primary'}" onclick="toggleTimer('${m.id}')">${m.timerRunning?'⏸ Pausar':'▶️ Iniciar'}</button>
+      <button class="btn btn-outline btn-sm" onclick="resetTimer('${m.id}')">🔄</button>
+    </div>
+  </div>`;
 }
 function renderMatchEditor(m, isLive){
   let html = `<div class="grid2" style="margin-bottom:8px;">
@@ -1669,8 +1763,18 @@ async function finishMatch(){
   m.finished = true;
   const teamA = state.session.teams[m.teamA].players, teamB = state.session.teams[m.teamB].players;
   const winner = m.scoreA>m.scoreB ? 'A' : m.scoreB>m.scoreA ? 'B' : null;
-  teamA.forEach(pid=>{ const p=getPlayer(pid); if(p){ p.matchesPlayed=(p.matchesPlayed||0)+1; if(winner==='A') p.wins=(p.wins||0)+1; } });
-  teamB.forEach(pid=>{ const p=getPlayer(pid); if(p){ p.matchesPlayed=(p.matchesPlayed||0)+1; if(winner==='B') p.wins=(p.wins||0)+1; } });
+  teamA.forEach(pid=>{
+    const p=getPlayer(pid); if(!p) return;
+    p.matchesPlayed=(p.matchesPlayed||0)+1;
+    if(winner==='A') p.wins=(p.wins||0)+1;
+    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreB===0) p.cleanSheets=(p.cleanSheets||0)+1; }
+  });
+  teamB.forEach(pid=>{
+    const p=getPlayer(pid); if(!p) return;
+    p.matchesPlayed=(p.matchesPlayed||0)+1;
+    if(winner==='B') p.wins=(p.wins||0)+1;
+    if(p.position==='GOL'){ p.gamesAsGK=(p.gamesAsGK||0)+1; if(m.scoreA===0) p.cleanSheets=(p.cleanSheets||0)+1; }
+  });
   await saveSession(); await savePlayers(); render();
 }
 
@@ -1693,13 +1797,31 @@ function computeStandings(){
   tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
   return tabela;
 }
+function computeH2H(){
+  const finalizadas = (state.session.matches || []).filter(m=>m.finished);
+  const pares = {};
+  finalizadas.forEach(m=>{
+    const menor = Math.min(m.teamA, m.teamB), maior = Math.max(m.teamA, m.teamB);
+    const chave = menor+'_'+maior;
+    if(!pares[chave]) pares[chave] = { timeMenor:menor, timeMaior:maior, jogos:0, vMenor:0, vMaior:0, empates:0, golsMenor:0, golsMaior:0 };
+    const par = pares[chave];
+    par.jogos++;
+    const scoreMenor = m.teamA===menor ? m.scoreA : m.scoreB;
+    const scoreMaior = m.teamA===maior ? m.scoreA : m.scoreB;
+    par.golsMenor += scoreMenor; par.golsMaior += scoreMaior;
+    if(scoreMenor>scoreMaior) par.vMenor++;
+    else if(scoreMaior>scoreMenor) par.vMaior++;
+    else par.empates++;
+  });
+  return Object.values(pares).sort((a,b)=> b.jogos-a.jogos);
+}
 function renderRanking(){
   const players = state.players;
   function table(list,key,icon,fmt){
     const rows = list.filter(p=>(p[key]||0)>0);
     if(rows.length===0) return `<div class="empty"><span class="icon">${icon}</span><div class="msg">Ainda sem dados registrados.</div></div>`;
     return `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">${icon}</th></tr></thead><tbody>
-      ${rows.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td>${escapeHtml(p.name)}</td><td class="num">${fmt?fmt(p):p[key]}</td></tr>`).join('')}
+      ${rows.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num">${fmt?fmt(p):p[key]}</td></tr>`).join('')}
     </tbody></table>`;
   }
   const artilheiros = players.slice().sort((a,b)=>(b.goals||0)-(a.goals||0));
@@ -1733,6 +1855,30 @@ function renderRanking(){
   }
   html += `</div>`;
 
+  const h2h = computeH2H();
+  html += `<div class="eyebrow">🆚 Confronto direto</div><div class="card">`;
+  if(h2h.length===0){
+    html += `<div class="empty"><span class="icon">🆚</span><div class="msg">Nenhum confronto encerrado ainda.</div></div>`;
+  } else {
+    html += h2h.map(par=>{
+      const nomeMenor = teamColorName(par.timeMenor), nomeMaior = teamColorName(par.timeMaior);
+      return `<div style="padding:8px 0; border-top:1px solid var(--line);">
+        <div class="row between" style="margin-bottom:4px;">
+          <span class="badge" style="background:${teamColorHex(par.timeMenor)}; color:#fff;">${nomeMenor}</span>
+          <span class="meta">${par.jogos} jogo(s)</span>
+          <span class="badge" style="background:${teamColorHex(par.timeMaior)}; color:#fff;">${nomeMaior}</span>
+        </div>
+        <div class="row between">
+          <span class="name" style="font-size:14px;">${par.vMenor}V</span>
+          <span class="meta">${par.empates}E</span>
+          <span class="name" style="font-size:14px;">${par.vMaior}V</span>
+        </div>
+        <div class="meta" style="text-align:center; margin-top:2px;">Gols: ${par.golsMenor} × ${par.golsMaior}</div>
+      </div>`;
+    }).join('');
+  }
+  html += `</div>`;
+
   const rodadasComJogos = agruparPorRodada(state.session.matches);
   html += `<div class="eyebrow">⭐ Destaques por rodada</div><div class="card">`;
   if(rodadasComJogos.length===0){
@@ -1754,6 +1900,13 @@ function renderRanking(){
   html += `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
   html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
   html += `<div class="eyebrow">🏅 Mais vitórias</div><div class="card">${table(vitorias,'wins','🏅')}</div>`;
+  const goleiros = players.filter(p=>(p.gamesAsGK||0)>0).sort((a,b)=>(b.cleanSheets||0)-(a.cleanSheets||0));
+  html += `<div class="eyebrow">🧤 Goleiros <small>jogos sem sofrer gol</small></div><div class="card">${
+    goleiros.length===0 ? '<div class="empty"><span class="icon">🧤</span><div class="msg">Nenhum goleiro com partidas encerradas ainda.</div></div>'
+    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Sem sofrer</th></tr></thead><tbody>
+        ${goleiros.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num">${p.cleanSheets||0}</td></tr>`).join('')}
+      </tbody></table>`
+  }</div>`;
   html += `<div class="eyebrow">📈 Melhor aproveitamento <small>mín. 3 jogos</small></div><div class="card">${
     aproveitamento.length===0 ? '<div class="empty"><span class="icon">📈</span><div class="msg">Ainda sem jogadores com 3+ partidas.</div></div>'
     : table(aproveitamento,'pct','%',p=>p.pct+'%')
@@ -1924,9 +2077,10 @@ async function compartilharRanking(){
   await compartilharImagemGenerica(gerarImagemRanking(), 'ranking.png', 'Ranking');
 }
 async function zerarRanking(){
-  if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias e jogos disputados. Essa ação não pode ser desfeita. Continuar?')) return;
+  if(!confirm('Isso vai zerar o ranking de TODOS os jogadores: gols, assistências, cartões, vitórias, jogos disputados e estatísticas de goleiro. Essa ação não pode ser desfeita. Continuar?')) return;
   state.players.forEach(p=>{
     p.goals = 0; p.assists = 0; p.yellow = 0; p.blue = 0; p.red = 0; p.wins = 0; p.matchesPlayed = 0;
+    p.gamesAsGK = 0; p.cleanSheets = 0;
   });
   await savePlayers();
   render();
@@ -1951,6 +2105,84 @@ function goToMonth(delta){
 }
 function goToCurrentMonth(){ financeiroMonth = null; render(); }
 
+/* ================= PIX (QR CODE) ================= */
+function emvField(id, value){
+  const len = String(value.length).padStart(2,'0');
+  return id + len + value;
+}
+function crc16ccitt(str){
+  let crc = 0xFFFF;
+  for(let i=0;i<str.length;i++){
+    crc ^= (str.charCodeAt(i) << 8);
+    for(let j=0;j<8;j++){
+      crc = (crc & 0x8000) ? ((crc<<1) ^ 0x1021) & 0xFFFF : (crc<<1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4,'0');
+}
+function normalizarTextoPix(str){
+  return (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9 ]/g,'');
+}
+function gerarPayloadPix(chave, nome, cidade, valor, txid){
+  nome = normalizarTextoPix(nome||'PELADA').substring(0,25) || 'PELADA';
+  cidade = normalizarTextoPix(cidade||'BRASIL').substring(0,15) || 'BRASIL';
+  txid = (txid||'***').replace(/[^a-zA-Z0-9]/g,'').substring(0,25) || '***';
+  const merchantAccountInfo = emvField('26', emvField('00','BR.GOV.BCB.PIX') + emvField('01', chave));
+  const valorField = valor ? emvField('54', Number(valor).toFixed(2)) : '';
+  let payload = emvField('00','01') + merchantAccountInfo + emvField('52','0000') + emvField('53','986') +
+    valorField + emvField('58','BR') + emvField('59', nome) + emvField('60', cidade) +
+    emvField('62', emvField('05', txid)) + '6304';
+  return payload + crc16ccitt(payload);
+}
+async function configurarPix(){
+  const atual = state.settings.pix || {};
+  const chave = prompt('Chave Pix (CPF, celular, e-mail ou chave aleatória):', atual.chave||'');
+  if(chave===null) return;
+  const nome = prompt('Nome do recebedor (como aparece no Pix):', atual.nome||'');
+  if(nome===null) return;
+  const cidade = prompt('Cidade do recebedor:', atual.cidade||'');
+  if(cidade===null) return;
+  state.settings.pix = { chave: chave.trim(), nome: nome.trim(), cidade: cidade.trim() };
+  await saveSettings();
+  render();
+}
+let qrPixAberto = null;
+function abrirQrPix(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  const pix = state.settings.pix;
+  if(!pix || !pix.chave){ alert('Configure sua chave Pix primeiro, no botão "⚙️ Configurar Pix" no topo da aba.'); return; }
+  const due = (p.dues||[]).find(d=>d.month===currentFinanceiroMonth());
+  if(!due){ alert('Esse jogador não tem cobrança lançada nesse mês.'); return; }
+  const payload = gerarPayloadPix(pix.chave, pix.nome, pix.cidade, due.value, 'PELADA'+p.id.slice(0,6).toUpperCase());
+  qrPixAberto = { playerId, payload };
+  render();
+}
+function fecharQrPix(){
+  qrPixAberto = null;
+  render();
+}
+function desenharQrPix(){
+  if(!qrPixAberto) return;
+  const el = document.getElementById('qrcode-container');
+  if(!el) return;
+  el.innerHTML = '';
+  try{
+    if(typeof QRCode === 'undefined'){ el.innerHTML = '<div class="meta">Não consegui carregar o gerador de QR Code — verifique sua internet.</div>'; return; }
+    new QRCode(el, { text: qrPixAberto.payload, width:220, height:220, colorDark:'#101317', colorLight:'#ffffff' });
+  }catch(e){
+    console.error(e);
+    el.innerHTML = '<div class="meta">Não consegui gerar o QR Code.</div>';
+  }
+}
+async function copiarCodigoPix(){
+  if(!qrPixAberto) return;
+  try{
+    await navigator.clipboard.writeText(qrPixAberto.payload);
+    alert('Código Pix copiado! É só colar no app do banco em "Pix Copia e Cola".');
+  }catch(e){
+    alert('Não consegui copiar automaticamente. Toque e segure no código pra copiar manualmente.');
+  }
+}
 function renderFinanceiro(){
   const mk = currentFinanceiroMonth();
   const isCurrent = mk === monthKey();
@@ -2011,7 +2243,19 @@ function renderFinanceiro(){
   </div>`;
 
   html += `<div class="eyebrow">Mensalidades <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
-  html += `<div class="meta" style="margin-bottom:10px;">Convidados não entram nessa lista automaticamente — só associados têm mensalidade por padrão.</div>`;
+  html += `<div class="row between" style="margin-bottom:10px; align-items:flex-start;">
+    <div class="meta" style="flex:1;">Convidados não entram nessa lista automaticamente — só associados têm mensalidade por padrão.</div>
+    <button class="btn btn-ghost btn-sm" style="flex-shrink:0; margin-left:8px;" onclick="configurarPix()">⚙️ Configurar Pix</button>
+  </div>`;
+  if(qrPixAberto){
+    const pQr = getPlayer(qrPixAberto.playerId);
+    html += `<div class="card" style="text-align:center;">
+      <div class="name" style="margin-bottom:10px;">QR Pix — ${pQr?escapeHtml(pQr.name):''}</div>
+      <div id="qrcode-container" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
+      <button class="btn btn-outline btn-block btn-sm" style="margin-bottom:6px;" onclick="copiarCodigoPix()">📋 Copiar código Pix</button>
+      <button class="btn btn-ghost btn-block btn-sm" onclick="fecharQrPix()">Fechar</button>
+    </div>`;
+  }
   if(players.length===0){
     html += `<div class="empty"><span class="icon">💰</span><div class="msg">Cadastre jogadores na aba Elenco para lançar cobranças.</div></div>`;
   } else {
@@ -2020,7 +2264,8 @@ function renderFinanceiro(){
       html += `<div class="card row between">
         <div><div class="name">${escapeHtml(p.name)}</div>${due ? `<div class="meta">R$${due.value} · ${due.method}</div>` : '<div class="meta">Sem cobrança lançada</div>'}</div>
         ${due
-          ? `<div class="row" style="gap:6px;">
+          ? `<div class="row" style="gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+              ${due.status!=='pago' ? `<button class="btn btn-outline btn-sm" onclick="abrirQrPix('${p.id}')">📱 Pix</button>` : ''}
               <button class="btn btn-sm ${due.status==='pago'?'btn-primary':'btn-outline'}" onclick="toggleDue('${p.id}')">${due.status==='pago'?'Pago ✓':'Marcar pago'}</button>
               <button class="btn btn-danger btn-sm" onclick="removeDue('${p.id}')">✕</button>
             </div>`
