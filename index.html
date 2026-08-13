@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
@@ -172,6 +173,7 @@ let state = {
   players: [],
   session: { date:'', checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 },
   settings: { groupName:'Minha Pelada' },
+  despesas: [],
   loaded:false
 };
 let currentTab = 'elenco';
@@ -205,6 +207,7 @@ async function saveKey(key, value){
 async function savePlayers(){ await saveKey('players_pro', state.players); }
 async function saveSession(){ await saveKey('session_pro', state.session); }
 async function saveSettings(){ await saveKey('settings_pro', state.settings); }
+async function saveDespesas(){ await saveKey('despesas_pro', state.despesas); }
 
 function mergeSessionData(data){
   const incoming = data.session;
@@ -224,12 +227,13 @@ async function loadAll(){
     const data = await apiLoad();
     state.players = data.players || [];
     state.settings = data.settings || {groupName:'Minha Pelada'};
+    state.despesas = data.despesas || [];
     const isNewDay = mergeSessionData(data);
     if(isNewDay) await saveSession();
   }catch(e){
     console.error('Erro ao carregar dados', e);
     alert('Não consegui conectar ao servidor. Verifique sua internet e puxe a tela para atualizar.');
-    state.players = []; state.settings = {groupName:'Minha Pelada'};
+    state.players = []; state.settings = {groupName:'Minha Pelada'}; state.despesas = [];
     state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 };
   }
   state.loaded = true;
@@ -269,6 +273,7 @@ async function refreshData(){
     const data = await apiLoad();
     state.players = data.players || [];
     state.settings = data.settings || {groupName:'Minha Pelada'};
+    state.despesas = data.despesas || [];
     mergeSessionData(data);
   }catch(e){ console.warn('Não consegui atualizar agora', e); }
   render();
@@ -550,6 +555,20 @@ function renderElenco(){
         <select id="newGuest"><option value="0">Associado</option><option value="1">Convidado</option></select>
       </div>
     </div>
+    <div class="field">
+      <label class="lbl">Já lançar mensalidade? <small style="text-transform:none; font-weight:400;">(não se aplica a convidados)</small></label>
+      <div class="segrow" id="novaCobrancaToggle">
+        <div class="seg on" id="novaCobrancaNao" onclick="setNovaCobranca(false)">Não</div>
+        <div class="seg" id="novaCobrancaSim" onclick="setNovaCobranca(true)">Sim</div>
+      </div>
+    </div>
+    <div id="novaCobrancaCampos" style="display:none;">
+      <div class="grid2">
+        <div class="field"><label class="lbl">Valor mensal (R$)</label><input type="number" id="newDueValue" value="30" min="0"></div>
+        <div class="field"><label class="lbl">Forma de pagamento</label><input type="text" id="newDueMethod" value="pix"></div>
+      </div>
+      <div class="meta" style="margin-bottom:10px;">Lança a cobrança deste mês e replica automaticamente pros meses seguintes até dezembro.</div>
+    </div>
     <button class="btn btn-primary btn-block" onclick="addPlayer()">+ Adicionar jogador</button>
   </div>`;
 
@@ -582,16 +601,35 @@ function renderElenco(){
 }
 function seg(val,label){ return `<div class="seg ${elencoFilter===val?'on':''}" onclick="elencoFilter='${val}'; render();">${label}</div>`; }
 
+let novaCobrancaAtiva = false;
+function setNovaCobranca(v){
+  novaCobrancaAtiva = v;
+  document.getElementById('novaCobrancaNao').classList.toggle('on', !v);
+  document.getElementById('novaCobrancaSim').classList.toggle('on', v);
+  document.getElementById('novaCobrancaCampos').style.display = v ? '' : 'none';
+}
 async function addPlayer(){
   const name = document.getElementById('newName').value.trim();
   if(!name){ document.getElementById('newName').focus(); return; }
   const position = document.getElementById('newPos').value;
   const level = Math.max(1, Math.min(5, parseInt(document.getElementById('newLevel').value)||3));
   const guest = document.getElementById('newGuest').value==='1';
-  state.players.push({
+  const novoPlayer = {
     id:uid(), name, position, level, guest, status:'espera',
     goals:0, assists:0, yellow:0, blue:0, red:0, matchesPlayed:0, wins:0, dues:[]
-  });
+  };
+  if(novaCobrancaAtiva && !guest){
+    const valor = parseFloat(document.getElementById('newDueValue').value) || 0;
+    const metodo = (document.getElementById('newDueMethod').value||'pix').trim() || 'pix';
+    const mkAtual = monthKey();
+    const ano = mkAtual.split('-')[0];
+    const mesInicial = parseInt(mkAtual.split('-')[1]);
+    for(let m=mesInicial; m<=12; m++){
+      novoPlayer.dues.push({id:uid(), month: ano+'-'+String(m).padStart(2,'0'), value:valor, method:metodo, status:'pendente'});
+    }
+  }
+  state.players.push(novoPlayer);
+  novaCobrancaAtiva = false;
   await savePlayers();
   render();
 }
@@ -2432,17 +2470,24 @@ function renderFinanceiro(){
     const due = (p.dues||[]).find(d=>d.month===mk);
     if(due){ if(due.status==='pago') recebido += due.value; else { pendente += due.value; inadimplentes++; } }
   });
+  const despesasDoMes = (state.despesas||[]).filter(d=>d.month===mk);
+  const totalDespesasMes = despesasDoMes.reduce((s,d)=>s+d.valor,0);
+  const saldoMes = recebido - totalDespesasMes;
 
   // resumo do ano inteiro
   const meses = Array.from({length:12}, (_,i)=>year+'-'+String(i+1).padStart(2,'0'));
-  const porMes = {}; meses.forEach(mkey=>porMes[mkey]={recebido:0, pendente:0});
-  let anoRecebido=0, anoPendente=0;
+  const porMes = {}; meses.forEach(mkey=>porMes[mkey]={recebido:0, pendente:0, despesa:0});
+  let anoRecebido=0, anoPendente=0, anoDespesa=0;
   players.forEach(p=>{
     (p.dues||[]).forEach(d=>{
       if(!porMes[d.month]) return;
       if(d.status==='pago'){ porMes[d.month].recebido += d.value; anoRecebido += d.value; }
       else { porMes[d.month].pendente += d.value; anoPendente += d.value; }
     });
+  });
+  (state.despesas||[]).forEach(d=>{
+    if(!porMes[d.month]) return;
+    porMes[d.month].despesa += d.valor; anoDespesa += d.valor;
   });
 
   let html = `<div class="eyebrow">Caixa da pelada</div>`;
@@ -2457,9 +2502,15 @@ function renderFinanceiro(){
 
   html += `<div class="pillrow">
     <div class="pill"><div class="v">R$${recebido}</div><div class="l">Recebido</div></div>
+    <div class="pill"><div class="v">R$${totalDespesasMes}</div><div class="l">Despesas</div></div>
+    <div class="pill"><div class="v" style="color:${saldoMes>=0?'var(--green-light)':'var(--danger)'};">R$${saldoMes}</div><div class="l">Saldo do mês</div></div>
+  </div>`;
+  html += `<div class="pillrow">
     <div class="pill"><div class="v">R$${pendente}</div><div class="l">Em aberto</div></div>
     <div class="pill"><div class="v">${inadimplentes}</div><div class="l">Inadimplentes</div></div>
   </div>`;
+
+  html += `<button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="exportarPlanilha()">📊 Exportar planilha (Excel)</button>`;
 
   html += `<div class="card">
     <div class="meta" style="margin-bottom:8px;">Pega as cobranças já lançadas em ${labelForMonth(mk)} e replica (mesmo valor e forma de pagamento) para os outros meses de ${year} que ainda estiverem vazios — sem mexer em meses que já têm cobrança lançada.</div>
@@ -2468,18 +2519,37 @@ function renderFinanceiro(){
 
   html += `<div class="eyebrow">Resumo de ${year} <small>ano todo</small></div>`;
   html += `<div class="pillrow">
-    <div class="pill"><div class="v">R$${anoRecebido}</div><div class="l">Recebido no ano</div></div>
-    <div class="pill"><div class="v">R$${anoPendente}</div><div class="l">Em aberto no ano</div></div>
+    <div class="pill"><div class="v">R$${anoRecebido}</div><div class="l">Recebido</div></div>
+    <div class="pill"><div class="v">R$${anoDespesa}</div><div class="l">Despesas</div></div>
+    <div class="pill"><div class="v" style="color:${(anoRecebido-anoDespesa)>=0?'var(--green-light)':'var(--danger)'};">R$${anoRecebido-anoDespesa}</div><div class="l">Saldo</div></div>
   </div>`;
   html += `<div class="card">
-    <table class="rank"><thead><tr><th>Mês</th><th style="text-align:center;">Recebido</th><th style="text-align:center;">Em aberto</th></tr></thead><tbody>
+    <div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
+    <thead><tr><th>Mês</th><th style="text-align:center;">Receb.</th><th style="text-align:center;">Desp.</th><th style="text-align:center;">Saldo</th></tr></thead><tbody>
       ${meses.map(mkey=>{
         const nomeMes = labelForMonth(mkey).split(' de ')[0];
         const destaque = mkey===mk ? 'style="color:var(--green-light); font-weight:700;"' : '';
-        return `<tr ${destaque}><td style="text-transform:capitalize;">${nomeMes}</td><td class="num">R$${porMes[mkey].recebido}</td><td class="num" style="color:${porMes[mkey].pendente>0?'var(--gold)':'var(--gray)'};">R$${porMes[mkey].pendente}</td></tr>`;
+        const saldo = porMes[mkey].recebido - porMes[mkey].despesa;
+        return `<tr ${destaque}><td style="text-transform:capitalize;">${nomeMes}</td><td class="num">R$${porMes[mkey].recebido}</td><td class="num" style="color:var(--danger);">R$${porMes[mkey].despesa}</td><td class="num" style="color:${saldo>=0?'var(--green-light)':'var(--danger)'};">R$${saldo}</td></tr>`;
       }).join('')}
-    </tbody></table>
+    </tbody></table></div>
   </div>`;
+
+  html += `<div class="eyebrow">Despesas <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
+  html += `<button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="addDespesa()">+ Lançar despesa</button>`;
+  if(despesasDoMes.length===0){
+    html += `<div class="empty"><span class="icon">🧾</span><div class="msg">Nenhuma despesa lançada nesse mês.</div></div>`;
+  } else {
+    despesasDoMes.forEach(d=>{
+      html += `<div class="card row between">
+        <div><div class="name">${escapeHtml(d.descricao)}</div><div class="meta">R$${d.valor}</div></div>
+        <div class="row" style="gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="editarDespesa('${d.id}')">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="removerDespesa('${d.id}')">✕</button>
+        </div>
+      </div>`;
+    });
+  }
 
   html += `<div class="eyebrow">Mensalidades <small style="text-transform:capitalize;">${labelForMonth(mk)}</small></div>`;
   html += `<button class="btn btn-outline btn-block" style="margin-bottom:10px;" onclick="abrirResumoAnual()">📊 Ver resumo do ano (todos, pendentes e pagos)</button>`;
@@ -2507,6 +2577,7 @@ function renderFinanceiro(){
         ${due
           ? `<div class="row" style="gap:6px; flex-wrap:wrap; justify-content:flex-end;">
               ${due.status!=='pago' ? `<button class="btn btn-outline btn-sm" onclick="abrirQrPix('${p.id}')">📱 Pix</button>` : ''}
+              <button class="btn btn-ghost btn-sm" onclick="editarDue('${p.id}')">✏️ Editar</button>
               <button class="btn btn-sm ${due.status==='pago'?'btn-primary':'btn-outline'}" onclick="toggleDue('${p.id}')">${due.status==='pago'?'Pago ✓':'Marcar pago'}</button>
               <button class="btn btn-danger btn-sm" onclick="removeDue('${p.id}')">✕</button>
             </div>`
@@ -2516,6 +2587,88 @@ function renderFinanceiro(){
     });
   }
   return html;
+}
+async function addDespesa(){
+  const mk = currentFinanceiroMonth();
+  const descricao = prompt(`Descrição da despesa de ${labelForMonth(mk)} (ex: aluguel da quadra, bolas novas):`, '');
+  if(descricao===null || !descricao.trim()) return;
+  const valorStr = prompt('Valor da despesa (R$):', '');
+  if(valorStr===null) return;
+  const valor = parseFloat(valorStr) || 0;
+  state.despesas = state.despesas || [];
+  state.despesas.push({id:uid(), month:mk, descricao:descricao.trim(), valor});
+  await saveDespesas();
+  render();
+}
+async function editarDespesa(despesaId){
+  const d = (state.despesas||[]).find(x=>x.id===despesaId); if(!d) return;
+  const descricao = prompt('Descrição:', d.descricao);
+  if(descricao===null) return;
+  const valorStr = prompt('Valor (R$):', d.valor);
+  if(valorStr===null) return;
+  d.descricao = descricao.trim() || d.descricao;
+  d.valor = parseFloat(valorStr) || d.valor;
+  await saveDespesas();
+  render();
+}
+async function removerDespesa(despesaId){
+  if(!confirm('Remover essa despesa?')) return;
+  state.despesas = (state.despesas||[]).filter(x=>x.id!==despesaId);
+  await saveDespesas();
+  render();
+}
+function exportarPlanilha(){
+  if(typeof XLSX === 'undefined'){ alert('Não consegui carregar o gerador de planilha — verifique sua internet e tente de novo.'); return; }
+
+  const receitas = [];
+  state.players.filter(p=>!p.guest).forEach(p=>{
+    (p.dues||[]).slice().sort((a,b)=>a.month.localeCompare(b.month)).forEach(d=>{
+      receitas.push({ Jogador:p.name, Mes:labelForMonth(d.month), Valor:d.value, Forma:d.method, Status: d.status==='pago'?'Pago':'Pendente' });
+    });
+  });
+
+  const despesas = (state.despesas||[]).slice().sort((a,b)=>a.month.localeCompare(b.month)).map(d=>({
+    Mes: labelForMonth(d.month), Descricao: d.descricao, Valor: d.valor
+  }));
+
+  const porMes = {};
+  state.players.filter(p=>!p.guest).forEach(p=>{
+    (p.dues||[]).forEach(d=>{
+      porMes[d.month] = porMes[d.month] || {receita:0, despesa:0};
+      if(d.status==='pago') porMes[d.month].receita += d.value;
+    });
+  });
+  (state.despesas||[]).forEach(d=>{
+    porMes[d.month] = porMes[d.month] || {receita:0, despesa:0};
+    porMes[d.month].despesa += d.valor;
+  });
+  const resumo = Object.keys(porMes).sort().map(mk=>({
+    Mes: labelForMonth(mk),
+    Receita: porMes[mk].receita,
+    Despesa: porMes[mk].despesa,
+    Saldo: porMes[mk].receita - porMes[mk].despesa
+  }));
+  const totalReceita = resumo.reduce((s,r)=>s+r.Receita,0);
+  const totalDespesa = resumo.reduce((s,r)=>s+r.Despesa,0);
+  resumo.push({ Mes:'TOTAL', Receita:totalReceita, Despesa:totalDespesa, Saldo: totalReceita-totalDespesa });
+
+  if(receitas.length===0 && despesas.length===0){
+    alert('Ainda não há cobranças nem despesas lançadas pra exportar.');
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), 'Resumo Mensal');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(receitas.length?receitas:[{Jogador:'',Mes:'',Valor:'',Forma:'',Status:''}]), 'Receitas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(despesas.length?despesas:[{Mes:'',Descricao:'',Valor:''}]), 'Despesas');
+
+  const nomeArquivo = 'financeiro-' + normalizarTextoPix(state.settings.groupName||'pelada').replace(/\s+/g,'-').toLowerCase() + '.xlsx';
+  try{
+    XLSX.writeFile(wb, nomeArquivo);
+  }catch(e){
+    console.error(e);
+    alert('Não consegui gerar o arquivo da planilha.');
+  }
 }
 async function addDue(playerId){
   const p = getPlayer(playerId); if(!p) return;
@@ -2534,6 +2687,18 @@ async function toggleDue(playerId){
   const mk = currentFinanceiroMonth();
   const due = (p.dues||[]).find(d=>d.month===mk); if(!due) return;
   due.status = due.status==='pago' ? 'pendente' : 'pago';
+  await savePlayers(); render();
+}
+async function editarDue(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  const mk = currentFinanceiroMonth();
+  const due = (p.dues||[]).find(d=>d.month===mk); if(!due) return;
+  const valueStr = prompt(`Editar valor da mensalidade de ${labelForMonth(mk)} (R$):`, due.value);
+  if(valueStr===null) return;
+  const method = prompt('Forma de pagamento:', due.method);
+  if(method===null) return;
+  due.value = parseFloat(valueStr) || due.value;
+  due.method = method.trim() || due.method;
   await savePlayers(); render();
 }
 async function removeDue(playerId){
