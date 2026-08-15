@@ -2047,7 +2047,7 @@ function renderRanking(){
     html += `<div class="empty"><span class="icon">🏆</span><div class="msg">Sorteie os times na aba Sorteio primeiro.</div></div>`;
   } else {
     html += `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
-      <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
+      <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">GP</th><th style="text-align:center;">GC</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
       <tbody>
         ${classificacao.map((t,i)=>`<tr>
           <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
@@ -2055,6 +2055,8 @@ function renderRanking(){
           <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
           <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
           <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gp}</td>
+          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gc}</td>
           <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
           <td class="num" style="font-size:17px;">${t.pts}</td>
         </tr>`).join('')}
@@ -2199,9 +2201,9 @@ function gerarImagemRanking(){
     y += classifTitleH;
 
     const tableX = 24, tableW = W-48;
-    const nameW = 300;
-    const statW = (tableW-nameW)/6;
-    const statCols = ['J','V','E','D','SG','PTS'];
+    const nameW = 230;
+    const statW = (tableW-nameW)/8;
+    const statCols = ['J','V','E','D','GP','GC','SG','PTS'];
 
     // cabeçalho
     ctx.fillStyle = '#8A8F98';
@@ -2237,10 +2239,10 @@ function gerarImagemRanking(){
       ctx.textAlign = 'left';
       ctx.fillText(t.nome, tableX+42, y+25, nameW-46);
 
-      const stats = [t.j, t.v, t.e, t.d, (t.sg>0?'+':'')+t.sg, t.pts];
+      const stats = [t.j, t.v, t.e, t.d, t.gp, t.gc, (t.sg>0?'+':'')+t.sg, t.pts];
       stats.forEach((val,ci)=>{
-        ctx.fillStyle = ci===5 ? '#4CAF50' : (ci===4 && t.sg<0) ? '#E5484D' : ci===4 && t.sg>0 ? '#4CAF50' : '#F5F6F7';
-        ctx.font = ci===5 ? 'bold 17px Arial, sans-serif' : '15px Arial, sans-serif';
+        ctx.fillStyle = ci===7 ? '#4CAF50' : (ci===6 && t.sg<0) ? '#E5484D' : ci===6 && t.sg>0 ? '#4CAF50' : '#F5F6F7';
+        ctx.font = ci===7 ? 'bold 16px Arial, sans-serif' : '13px Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(String(val), tableX+nameW+statW*ci+statW/2, y+25);
       });
