@@ -385,11 +385,47 @@ function renderPerfilJogador(playerId){
       ${due ? statusBadge2(due.status) : ''}
     </div>`;
   }
+  html += `<button class="btn btn-outline btn-block" style="margin-top:6px;" onclick="editarEstatisticas('${p.id}')">✏️ Corrigir estatísticas manualmente</button>`;
   html += `<button class="btn btn-primary btn-block" style="margin-top:6px;" onclick="compartilharPerfil('${p.id}')">📤 Compartilhar desempenho (imagem)</button>`;
   return html;
 }
 function statusBadge2(status){
   return status==='pago' ? '<span class="badge badge-conf">Pago</span>' : '<span class="badge badge-wait">Pendente</span>';
+}
+async function editarEstatisticas(playerId){
+  const p = getPlayer(playerId); if(!p) return;
+  if(!confirm(`Você vai corrigir manualmente os números de ${p.name} — use isso pra somar de volta dados que se perderam (ex: de uma rodada que sumiu). Vai passar por cada número um de cada vez. Continuar?`)) return;
+
+  const jogos = prompt('Jogos disputados:', p.matchesPlayed||0); if(jogos===null) return;
+  const gols = prompt('Gols:', p.goals||0); if(gols===null) return;
+  const assist = prompt('Assistências:', p.assists||0); if(assist===null) return;
+  const vitorias = prompt('Vitórias:', p.wins||0); if(vitorias===null) return;
+  const amarelo = prompt('Cartões amarelos:', p.yellow||0); if(amarelo===null) return;
+  const azul = prompt('Cartões azuis:', p.blue||0); if(azul===null) return;
+  const vermelho = prompt('Cartões vermelhos:', p.red||0); if(vermelho===null) return;
+
+  let jogosGK=null, sofridos=null, semSofrer=null;
+  if(p.position==='GOL'){
+    jogosGK = prompt('Jogos como goleiro:', p.gamesAsGK||0); if(jogosGK===null) return;
+    sofridos = prompt('Gols sofridos:', p.goalsConceded||0); if(sofridos===null) return;
+    semSofrer = prompt('Jogos sem sofrer gol:', p.cleanSheets||0); if(semSofrer===null) return;
+  }
+
+  p.matchesPlayed = Math.max(0, parseInt(jogos)||0);
+  p.goals = Math.max(0, parseInt(gols)||0);
+  p.assists = Math.max(0, parseInt(assist)||0);
+  p.wins = Math.max(0, parseInt(vitorias)||0);
+  p.yellow = Math.max(0, parseInt(amarelo)||0);
+  p.blue = Math.max(0, parseInt(azul)||0);
+  p.red = Math.max(0, parseInt(vermelho)||0);
+  if(p.position==='GOL'){
+    p.gamesAsGK = Math.max(0, parseInt(jogosGK)||0);
+    p.goalsConceded = Math.max(0, parseInt(sofridos)||0);
+    p.cleanSheets = Math.max(0, parseInt(semSofrer)||0);
+  }
+  await savePlayers();
+  alert('Estatísticas atualizadas!');
+  render();
 }
 function gerarImagemPerfil(playerId){
   const p = getPlayer(playerId); if(!p) return null;
@@ -1520,6 +1556,10 @@ function renderMatchEditor(m, isLive){
       <button class="btn btn-outline" onclick="openGoal('${m.id}','A')">⚽ Gol ${teamColorName(m.teamA)}</button>
       <button class="btn btn-outline" onclick="openGoal('${m.id}','B')">⚽ Gol ${teamColorName(m.teamB)}</button>
     </div>
+    <div class="grid2" style="margin-bottom:8px;">
+      <button class="btn btn-outline" onclick="openAssist('${m.id}','A')">🎯 Assistência ${teamColorName(m.teamA)}</button>
+      <button class="btn btn-outline" onclick="openAssist('${m.id}','B')">🎯 Assistência ${teamColorName(m.teamB)}</button>
+    </div>
     <div class="grid2" style="margin-bottom:10px;">
       <button class="btn btn-outline" onclick="openCard('${m.id}','A')">🟨🟦🟥 Cartão ${teamColorName(m.teamA)}</button>
       <button class="btn btn-outline" onclick="openCard('${m.id}','B')">🟨🟦🟥 Cartão ${teamColorName(m.teamB)}</button>
@@ -1838,6 +1878,26 @@ async function confirmGoal(matchId, side){
   m.events.push({type:'goal', playerId:scorerId, side});
   const scorer = getPlayer(scorerId); if(scorer) scorer.goals=(scorer.goals||0)+1;
   if(assistId){ m.events.push({type:'assist', playerId:assistId, side}); const a=getPlayer(assistId); if(a) a.assists=(a.assists||0)+1; }
+  actionDiv(matchId).innerHTML='';
+  await saveSession(); await savePlayers(); render();
+}
+function openAssist(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
+  const teamIdx = side==='A'?m.teamA:m.teamB;
+  const players = state.session.teams[teamIdx].players.map(getPlayer).filter(Boolean);
+  actionDiv(matchId).innerHTML = `<div class="card">
+    <label class="lbl">Quem deu a assistência? (${teamColorName(teamIdx)})</label>
+    <select id="assistOnlySel_${matchId}">${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmAssistOnly('${matchId}','${side}')">Confirmar assistência</button>
+      <button class="btn btn-outline" onclick="actionDiv('${matchId}').innerHTML=''">Cancelar</button>
+    </div></div>`;
+}
+async function confirmAssistOnly(matchId, side){
+  const m = getMatchById(matchId); if(!m) return;
+  const playerId = document.getElementById('assistOnlySel_'+matchId).value;
+  m.events.push({type:'assist', playerId, side});
+  const a = getPlayer(playerId); if(a) a.assists=(a.assists||0)+1;
   actionDiv(matchId).innerHTML='';
   await saveSession(); await savePlayers(); render();
 }
