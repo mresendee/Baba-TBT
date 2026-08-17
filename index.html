@@ -2173,11 +2173,18 @@ function renderRanking(){
   html += `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
   html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
   html += `<div class="eyebrow">🏅 Mais vitórias</div><div class="card">${table(vitorias,'wins','🏅')}</div>`;
-  const goleiros = players.filter(p=>(p.gamesAsGK||0)>0).sort((a,b)=>(b.cleanSheets||0)-(a.cleanSheets||0));
-  html += `<div class="eyebrow">🧤 Goleiros <small>jogos sem sofrer gol</small></div><div class="card">${
+  const goleiros = players.filter(p=>(p.gamesAsGK||0)>0).sort((a,b)=>{
+    const mediaA = (a.goalsConceded||0)/(a.gamesAsGK||1);
+    const mediaB = (b.goalsConceded||0)/(b.gamesAsGK||1);
+    return mediaA - mediaB;
+  });
+  html += `<div class="eyebrow">🧤 Goleiros <small>menor média de gols sofridos por jogo</small></div><div class="card">${
     goleiros.length===0 ? '<div class="empty"><span class="icon">🧤</span><div class="msg">Nenhum goleiro com partidas encerradas ainda.</div></div>'
-    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Sofridos</th><th style="text-align:center;">Sem sofrer</th></tr></thead><tbody>
-        ${goleiros.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.goalsConceded||0}</td><td class="num">${p.cleanSheets||0}</td></tr>`).join('')}
+    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Sofridos</th><th style="text-align:center;">Média</th><th style="text-align:center;">Sem sofrer</th></tr></thead><tbody>
+        ${goleiros.map((p,i)=>{
+          const media = ((p.goalsConceded||0)/(p.gamesAsGK||1)).toFixed(2);
+          return `<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td onclick="abrirPerfil('${p.id}')" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.goalsConceded||0}</td><td class="num" style="color:var(--green-light); font-family:inherit; font-size:13px;">${media}</td><td class="num">${p.cleanSheets||0}</td></tr>`;
+        }).join('')}
       </tbody></table>`
   }</div>`;
   html += `<div class="eyebrow">📈 Melhor aproveitamento <small>mín. 3 jogos</small></div><div class="card">${
