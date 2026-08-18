@@ -265,6 +265,7 @@ function setTab(tab){
   currentTab = tab;
   perfilAberto = null;
   resumoAnualAberto = false;
+  simulacaoAberta = false;
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.t===tab));
   refreshData();
 }
@@ -280,10 +281,14 @@ async function refreshData(){
 }
 let perfilAberto = null;
 let resumoAnualAberto = false;
+let simulacaoAberta = false;
+let simulacaoJogos = [];
 function abrirPerfil(playerId){ perfilAberto = playerId; render(); }
 function fecharPerfil(){ perfilAberto = null; render(); }
 function abrirResumoAnual(){ resumoAnualAberto = true; render(); }
 function fecharResumoAnual(){ resumoAnualAberto = false; render(); }
+function abrirSimulacao(){ simulacaoAberta = true; render(); }
+function fecharSimulacao(){ simulacaoAberta = false; render(); }
 function render(){
   document.getElementById('dateSub').textContent = todayLabel();
   document.getElementById('groupName').textContent = state.settings.groupName;
@@ -291,6 +296,7 @@ function render(){
   if(!state.loaded){ view.innerHTML = '<div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>'; return; }
   if(perfilAberto){ view.innerHTML = renderPerfilJogador(perfilAberto); return; }
   if(resumoAnualAberto){ view.innerHTML = renderResumoAnual(); return; }
+  if(simulacaoAberta){ view.innerHTML = renderSimulacao(); return; }
   if(currentTab==='elenco') view.innerHTML = renderElenco();
   else if(currentTab==='chegada') view.innerHTML = renderChegada();
   else if(currentTab==='sorteio') view.innerHTML = renderSorteio();
@@ -2068,6 +2074,108 @@ function computeStandings(){
   tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
   return tabela;
 }
+function computeStandingsComSimulacao(){
+  const teams = state.session.teams || [];
+  const tabela = teams.map((t,i)=>({idx:i, nome:teamColorName(i), j:0, v:0, e:0, d:0, gp:0, gc:0, sg:0, pts:0}));
+  const finalizadas = (state.session.matches || []).filter(m=>m.finished);
+  const todasPartidas = finalizadas.concat(simulacaoJogos);
+  todasPartidas.forEach(m=>{
+    const A = tabela[m.teamA], B = tabela[m.teamB];
+    if(!A || !B) return;
+    A.j++; B.j++;
+    A.gp += m.scoreA; A.gc += m.scoreB;
+    B.gp += m.scoreB; B.gc += m.scoreA;
+    if(m.scoreA > m.scoreB){ A.v++; A.pts+=3; B.d++; }
+    else if(m.scoreB > m.scoreA){ B.v++; B.pts+=3; A.d++; }
+    else { A.e++; B.e++; A.pts+=1; B.pts+=1; }
+  });
+  tabela.forEach(t=> t.sg = t.gp - t.gc);
+  tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
+  return tabela;
+}
+function renderStandingsTable(tabela){
+  return `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
+    <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">GP</th><th style="text-align:center;">GC</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
+    <tbody>
+      ${tabela.map((t,i)=>`<tr>
+        <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.j}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gp}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gc}</td>
+        <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
+        <td class="num" style="font-size:17px;">${t.pts}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+function renderSimulacao(){
+  const teams = state.session.teams || [];
+  let html = `<button class="btn btn-ghost btn-sm" onclick="fecharSimulacao()">← Voltar</button>`;
+  html += `<div class="eyebrow" style="margin-top:10px;">🔮 Simulação de rodadas futuras</div>`;
+  html += `<div class="meta" style="margin-bottom:10px;">Adicione placares hipotéticos pra ver como o campeonato pode terminar. Nada aqui é salvo nem afeta a tabela oficial — some se você sair dessa tela.</div>`;
+
+  if(teams.length<2){
+    html += `<div class="empty"><span class="icon">🎲</span><div class="msg">Sorteie os times primeiro na aba Sorteio.</div></div>`;
+    return html;
+  }
+
+  html += `<div class="eyebrow">Tabela oficial <small>ponto de partida</small></div>`;
+  html += `<div class="card">${renderStandingsTable(computeStandings())}</div>`;
+
+  html += `<div class="eyebrow">Adicionar placar simulado</div>`;
+  html += `<div class="card">
+    <div class="grid2" style="margin-bottom:8px;">
+      <select id="simTeamA">${teams.map((t,i)=>`<option value="${i}">${teamColorName(i)}</option>`).join('')}</select>
+      <select id="simTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
+    </div>
+    <div class="grid2" style="margin-bottom:10px;">
+      <input type="number" id="simScoreA" placeholder="Placar Time A" min="0" value="0">
+      <input type="number" id="simScoreB" placeholder="Placar Time B" min="0" value="0">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="addSimulacao()">+ Adicionar ao cenário</button>
+  </div>`;
+
+  if(simulacaoJogos.length>0){
+    html += `<div class="eyebrow">Placares simulados <small>${simulacaoJogos.length} jogo(s)</small></div>`;
+    simulacaoJogos.forEach((m,idx)=>{
+      html += `<div class="card row between">
+        <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+        <span style="font-family:'Rajdhani'; font-weight:700; font-size:16px;">${m.scoreA} × ${m.scoreB}</span>
+        <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+        <button class="btn btn-danger btn-sm" onclick="removerSimulacao(${idx})">✕</button>
+      </div>`;
+    });
+    html += `<button class="btn btn-outline btn-block" style="margin-bottom:14px;" onclick="limparSimulacao()">🗑️ Limpar simulação</button>`;
+  }
+
+  html += `<div class="eyebrow">📊 Tabela simulada <small>como pode terminar</small></div>`;
+  html += `<div class="card">${renderStandingsTable(computeStandingsComSimulacao())}</div>`;
+  html += `<div class="meta" style="text-align:center;">⚠️ Cenário fictício — não é salvo em nenhum lugar.</div>`;
+  return html;
+}
+function addSimulacao(){
+  const teams = state.session.teams;
+  const a = parseInt(document.getElementById('simTeamA').value);
+  const b = parseInt(document.getElementById('simTeamB').value);
+  if(a===b){ alert('Escolha dois times diferentes.'); return; }
+  const scoreA = Math.max(0, parseInt(document.getElementById('simScoreA').value)||0);
+  const scoreB = Math.max(0, parseInt(document.getElementById('simScoreB').value)||0);
+  simulacaoJogos.push({teamA:a, teamB:b, scoreA, scoreB});
+  render();
+}
+function removerSimulacao(idx){
+  simulacaoJogos.splice(idx,1);
+  render();
+}
+function limparSimulacao(){
+  if(simulacaoJogos.length===0) return;
+  if(!confirm('Limpar todos os placares simulados?')) return;
+  simulacaoJogos = [];
+  render();
+}
 function computeH2H(){
   const finalizadas = (state.session.matches || []).filter(m=>m.finished);
   const pares = {};
@@ -2106,27 +2214,15 @@ function renderRanking(){
   if(state.session.teams.length===0){
     html += `<div class="empty"><span class="icon">🏆</span><div class="msg">Sorteie os times na aba Sorteio primeiro.</div></div>`;
   } else {
-    html += `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
-      <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">GP</th><th style="text-align:center;">GC</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
-      <tbody>
-        ${classificacao.map((t,i)=>`<tr>
-          <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.j}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gp}</td>
-          <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gc}</td>
-          <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
-          <td class="num" style="font-size:17px;">${t.pts}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+    html += renderStandingsTable(classificacao);
     if(classificacao.every(t=>t.j===0)){
       html += `<div class="meta" style="margin-top:8px;">Nenhuma partida encerrada ainda — a tabela atualiza sozinha conforme as partidas forem finalizadas na aba Partida.</div>`;
     }
   }
   html += `</div>`;
+  if(state.session.teams.length>0){
+    html += `<button class="btn btn-outline btn-block" style="margin-bottom:14px;" onclick="abrirSimulacao()">🔮 Simular próximas rodadas</button>`;
+  }
 
   const h2h = computeH2H();
   html += `<div class="eyebrow">🆚 Confronto direto</div><div class="card">`;
