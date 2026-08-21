@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Baba TBT — Acompanhar</title>
+<meta name="theme-color" content="#101317">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#101317; --card:#1C2026; --card-2:#20252c; --line:rgba(255,255,255,0.08);
+  --green:#2E7D32; --green-light:#4CAF50; --white:#F5F6F7; --gray:#8A8F98; --gray-dim:#565B63;
+  --gold:#E4B93B; --danger:#E5484D; --blue-card:#3D8FB3;
+  --tier-bronze:#A0522D; --tier-prata:#B0B7BD; --tier-ouro:#E4B93B; --tier-platina:#5FC9BE; --tier-diamante:#6FB3F2; --tier-elite:#8B5CF6;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg); font-family:'Inter',sans-serif; color:var(--white); min-height:100vh; display:flex; justify-content:center;}
+#shell{width:100%; max-width:460px; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+header{
+  padding:18px 18px 12px; display:flex; align-items:center; gap:10px; justify-content:space-between;
+  position:sticky; top:0; background:linear-gradient(180deg, var(--bg) 75%, transparent); z-index:6; border-bottom:1px solid var(--line);
+}
+.brand{display:flex; align-items:center; gap:10px; min-width:0;}
+.logo{width:34px; height:34px; border-radius:9px; overflow:hidden; flex-shrink:0; background:var(--card-2);}
+.logo img{width:100%; height:100%; object-fit:cover;}
+header h1{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:18px; text-transform:uppercase; letter-spacing:0.6px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+header .sub{font-size:10.5px; color:var(--gray);}
+.viewbadge{font-size:9px; font-weight:700; background:rgba(228,185,59,0.16); color:var(--gold); padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.3px;}
+
+main{flex:1; padding:14px 16px 40px;}
+
+.eyebrow{font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--green-light); margin:16px 0 8px; display:flex; align-items:center; justify-content:space-between;}
+.eyebrow small{font-family:'Inter',sans-serif; font-size:11px; color:var(--gray); text-transform:none; letter-spacing:0; font-weight:500;}
+
+.card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:10px;}
+.row{display:flex; align-items:center; gap:10px;}
+.between{justify-content:space-between;}
+
+.btn{font-family:'Inter',sans-serif; font-weight:700; font-size:13px; border:none; border-radius:11px; padding:12px 15px; cursor:pointer;}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:var(--green); color:#fff;}
+.btn-outline{background:transparent; border:1px solid var(--line); color:var(--white);}
+.btn-ghost{background:var(--card-2); color:var(--white);}
+.btn-sm{padding:7px 10px; font-size:12px; border-radius:9px;}
+.btn-block{width:100%;}
+
+input[type=text]{
+  font-family:'Inter',sans-serif; background:var(--card-2); border:1px solid var(--line); color:var(--white);
+  border-radius:10px; padding:12px 13px; font-size:15px; width:100%; outline:none; text-transform:uppercase; text-align:center; letter-spacing:2px;
+}
+input::placeholder{color:var(--gray-dim); letter-spacing:normal; text-transform:none;}
+input:focus{border-color:var(--green-light);}
+
+.overall-badge{width:42px; height:50px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-family:'Rajdhani',sans-serif; font-weight:700; flex-shrink:0; border:1.5px solid;
+  background:linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0));}
+.overall-badge .num{font-size:18px; line-height:1;}
+.overall-badge .tier{font-size:7.5px; letter-spacing:0.3px; text-transform:uppercase; margin-top:2px; opacity:0.85;}
+.tier-Bronze{border-color:var(--tier-bronze); color:var(--tier-bronze);}
+.tier-Prata{border-color:var(--tier-prata); color:var(--tier-prata);}
+.tier-Ouro{border-color:var(--tier-ouro); color:var(--tier-ouro);}
+.tier-Platina{border-color:var(--tier-platina); color:var(--tier-platina);}
+.tier-Diamante{border-color:var(--tier-diamante); color:var(--tier-diamante);}
+.tier-Elite{border-color:var(--tier-elite); color:var(--tier-elite);}
+
+.name{font-weight:700; font-size:14px;}
+.meta{font-size:11.5px; color:var(--gray);}
+
+.badge{font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap;}
+.badge-conf{background:rgba(76,175,80,0.16); color:var(--green-light);}
+.badge-wait{background:rgba(228,185,59,0.16); color:var(--gold);}
+.badge-guest{background:rgba(139,92,246,0.16); color:#a78bfa;}
+.badge-abs{background:rgba(229,72,77,0.14); color:var(--danger);}
+
+.empty{text-align:center; padding:38px 14px; color:var(--gray);}
+.empty .icon{font-size:32px; display:block; margin-bottom:8px;}
+.empty .msg{font-size:13px; line-height:1.5;}
+
+table.rank{width:100%; border-collapse:collapse; font-size:12.5px;}
+table.rank th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.3px; color:var(--gray); padding:0 5px 7px; font-weight:700;}
+table.rank td{padding:7px 5px; border-top:1px solid var(--line);}
+table.rank td.num{font-family:'Rajdhani',sans-serif; font-size:15px; color:var(--green-light); text-align:center;}
+.pos{width:20px; height:20px; border-radius:6px; background:var(--card-2); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:var(--gray);}
+.pos.p1{background:var(--gold); color:#1a1305;} .pos.p2{background:#c8ccc8; color:#111;} .pos.p3{background:#c98a4e; color:#1b0f04;}
+
+.tabsrow{display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; padding-bottom:2px;}
+.tabsrow button{flex-shrink:0; background:var(--card-2); border:1px solid var(--line); color:var(--gray); font-family:'Inter',sans-serif; font-weight:700; font-size:12px; padding:9px 14px; border-radius:10px; cursor:pointer;}
+.tabsrow button.on{background:var(--green); color:#fff; border-color:var(--green);}
+
+.scoreline{display:flex; align-items:center; justify-content:space-between; padding:6px 0;}
+.divider{height:1px; background:var(--line); margin:14px 0;}
+</style>
+</head>
+<body>
+<div id="shell">
+  <header>
+    <div class="brand">
+      <div class="logo"><img src="icon-192.png" alt="Escudo"></div>
+      <div><h1 id="groupName">Acompanhar</h1><div class="sub" id="dateSub"></div></div>
+    </div>
+    <span class="viewbadge">Só leitura</span>
+  </header>
+  <main id="view">
+    <div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>
+  </main>
+</div>
+
+<script>
+const CODE_KEY = 'pelada_view_code';
+let state = { players:[], session:{teams:[],matches:[]}, settings:{groupName:'Pelada'}, loaded:false };
+let aba = 'ranking';
+
+function getCode(){
+  const urlCode = new URLSearchParams(location.search).get('code');
+  if(urlCode) return urlCode.trim().toUpperCase();
+  return localStorage.getItem(CODE_KEY);
+}
+function setCode(c){ localStorage.setItem(CODE_KEY, c); }
+function clearCode(){ localStorage.removeItem(CODE_KEY); }
+
+function todayLabel(){ return new Date().toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'}); }
+function escapeHtml(str){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+function tierOf(level){ return {1:'Bronze', 2:'Prata', 3:'Ouro', 4:'Platina', 5:'Elite'}[level] || 'Bronze'; }
+function overallBadge(p){ return `<div class="overall-badge tier-${tierOf(p.level)}"><div class="num">${p.level}</div><div class="tier">${tierOf(p.level)}</div></div>`; }
+function statusBadge(s){
+  return {confirmado:'<span class="badge badge-conf">Confirmado</span>', ausente:'<span class="badge badge-abs">Ausente</span>',
+    espera:'<span class="badge badge-wait">Lista de espera</span>'}[s] || '';
+}
+function teamColorName(i){
+  const t = state.session.teams && state.session.teams[i];
+  if(t && t.name) return t.name;
+  return 'Time ' + (i+1);
+}
+function teamColorHex(i){ return ['#2E7D32','#B0B7BD','#3D8FB3','#3a3f47','#C0392B','#E4B93B','#8B5CF6','#E08A2E'][i % 8]; }
+function getPlayer(id){ return state.players.find(p=>p.id===id); }
+
+async function carregar(){
+  const code = getCode();
+  if(!code){ renderEntrada(); return; }
+  try{
+    const r = await fetch('/api/data?code=' + encodeURIComponent(code));
+    if(!r.ok) throw new Error('falha');
+    const data = await r.json();
+    state.players = data.players || [];
+    state.settings = data.settings || {groupName:'Pelada'};
+    state.session = data.session || {teams:[], matches:[]};
+    state.loaded = true;
+    render();
+  }catch(e){
+    console.error(e);
+    document.getElementById('view').innerHTML = `<div class="empty"><span class="icon">⚠️</span><div class="msg">Não consegui carregar os dados. Verifique sua internet e tente de novo.</div></div>
+      <button class="btn btn-outline btn-block" onclick="carregar()">🔄 Tentar de novo</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="trocarCodigo()">Trocar código</button>`;
+  }
+}
+function renderEntrada(){
+  document.getElementById('view').innerHTML = `
+    <div style="padding-top:20px; text-align:center; margin-bottom:14px;">
+      <div class="meta">Digite o código da pelada que o organizador te passou pra acompanhar as estatísticas.</div>
+    </div>
+    <div class="card">
+      <input type="text" id="codeInput" placeholder="Ex: K7XQ2P" maxlength="12" style="margin-bottom:10px;">
+      <button class="btn btn-primary btn-block" onclick="entrarComCodigo()">Ver estatísticas</button>
+    </div>`;
+}
+function entrarComCodigo(){
+  const raw = document.getElementById('codeInput').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!raw){ alert('Digite um código válido.'); return; }
+  setCode(raw);
+  document.getElementById('view').innerHTML = '<div class="empty"><span class="icon">⏳</span><div class="msg">Carregando...</div></div>';
+  carregar();
+}
+function trocarCodigo(){
+  clearCode();
+  renderEntrada();
+}
+function setAba(a){ aba='a'===a?a:a; aba=a; render(); }
+
+function render(){
+  document.getElementById('dateSub').textContent = todayLabel();
+  document.getElementById('groupName').textContent = state.settings.groupName || 'Pelada';
+  const view = document.getElementById('view');
+  let html = `<div class="tabsrow">
+    <button class="${aba==='ranking'?'on':''}" onclick="setAba('ranking')">🏆 Ranking</button>
+    <button class="${aba==='times'?'on':''}" onclick="setAba('times')">🎲 Times</button>
+    <button class="${aba==='rodadas'?'on':''}" onclick="setAba('rodadas')">📅 Rodadas</button>
+    <button class="${aba==='elenco'?'on':''}" onclick="setAba('elenco')">👥 Elenco</button>
+    <button class="${aba==='simulacao'?'on':''}" onclick="setAba('simulacao')">🔮 Simular</button>
+  </div>`;
+
+  if(aba==='ranking') html += renderRanking();
+  else if(aba==='times') html += renderTimes();
+  else if(aba==='rodadas') html += renderRodadas();
+  else if(aba==='elenco') html += renderElencoView();
+  else if(aba==='simulacao') html += renderSimulacao();
+
+  html += `<div class="divider"></div><button class="btn btn-outline btn-block" onclick="carregar()">🔄 Atualizar</button>
+  <button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="trocarCodigo()">Trocar código</button>`;
+  view.innerHTML = html;
+}
+
+function computeStandings(){
+  const teams = state.session.teams || [];
+  const tabela = teams.map((t,i)=>({nome:teamColorName(i), j:0, v:0, e:0, d:0, gp:0, gc:0, sg:0, pts:0}));
+  const finalizadas = (state.session.matches || []).filter(m=>m.finished);
+  finalizadas.forEach(m=>{
+    const A = tabela[m.teamA], B = tabela[m.teamB];
+    if(!A || !B) return;
+    A.j++; B.j++;
+    A.gp += m.scoreA; A.gc += m.scoreB;
+    B.gp += m.scoreB; B.gc += m.scoreA;
+    if(m.scoreA > m.scoreB){ A.v++; A.pts+=3; B.d++; }
+    else if(m.scoreB > m.scoreA){ B.v++; B.pts+=3; A.d++; }
+    else { A.e++; B.e++; A.pts+=1; B.pts+=1; }
+  });
+  tabela.forEach(t=> t.sg = t.gp - t.gc);
+  tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
+  return tabela;
+}
+function renderRanking(){
+  const players = state.players;
+  function table(list,key,icon,fmt){
+    const rows = list.filter(p=>(p[key]||0)>0);
+    if(rows.length===0) return `<div class="empty"><span class="icon">${icon}</span><div class="msg">Ainda sem dados registrados.</div></div>`;
+    return `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">${icon}</th></tr></thead><tbody>
+      ${rows.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td>${escapeHtml(p.name)}</td><td class="num">${fmt?fmt(p):p[key]}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+  const classificacao = computeStandings();
+  let html = `<div class="eyebrow">🏆 Classificação</div><div class="card">`;
+  if((state.session.teams||[]).length===0){
+    html += `<div class="empty"><span class="icon">🏆</span><div class="msg">Times ainda não foram sorteados.</div></div>`;
+  } else {
+    html += `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
+      <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">GP</th><th style="text-align:center;">GC</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
+      <tbody>${classificacao.map((t,i)=>`<tr>
+        <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.j}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gp}</td>
+        <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gc}</td>
+        <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
+        <td class="num" style="font-size:17px;">${t.pts}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+  html += `</div>`;
+
+  const artilheiros = players.slice().sort((a,b)=>(b.goals||0)-(a.goals||0));
+  const garcons = players.slice().sort((a,b)=>(b.assists||0)-(a.assists||0));
+  const vitorias = players.slice().sort((a,b)=>(b.wins||0)-(a.wins||0));
+  const goleiros = players.filter(p=>(p.gamesAsGK||0)>0).sort((a,b)=>((a.goalsConceded||0)/(a.gamesAsGK||1))-((b.goalsConceded||0)/(b.gamesAsGK||1)));
+  const cartoes = players.filter(p=>(p.yellow||0)+(p.blue||0)+(p.red||0)>0).sort((a,b)=>((b.yellow||0)+2*(b.blue||0)+3*(b.red||0))-((a.yellow||0)+2*(a.blue||0)+3*(a.red||0)));
+
+  html += `<div class="eyebrow">🥇 Artilharia</div><div class="card">${table(artilheiros,'goals','⚽')}</div>`;
+  html += `<div class="eyebrow">🎯 Garçons (assistências)</div><div class="card">${table(garcons,'assists','🎯')}</div>`;
+  html += `<div class="eyebrow">🏅 Mais vitórias</div><div class="card">${table(vitorias,'wins','🏅')}</div>`;
+  html += `<div class="eyebrow">🧤 Goleiros <small>menor média de gols sofridos</small></div><div class="card">${
+    goleiros.length===0 ? '<div class="empty"><span class="icon">🧤</span><div class="msg">Nenhum goleiro com jogos ainda.</div></div>'
+    : `<table class="rank"><thead><tr><th></th><th>Jogador</th><th style="text-align:center;">Jogos</th><th style="text-align:center;">Média</th></tr></thead><tbody>
+        ${goleiros.map((p,i)=>`<tr><td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}">${i+1}</span></td><td>${escapeHtml(p.name)}</td><td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${p.gamesAsGK||0}</td><td class="num">${((p.goalsConceded||0)/(p.gamesAsGK||1)).toFixed(2)}</td></tr>`).join('')}
+      </tbody></table>`
+  }</div>`;
+  html += `<div class="eyebrow">🟨🟦🟥 Cartões</div><div class="card">${
+    cartoes.length===0 ? '<div class="empty"><span class="icon">🟨</span><div class="msg">Nenhum cartão registrado ainda.</div></div>'
+    : `<table class="rank"><thead><tr><th>Jogador</th><th style="text-align:center;">🟨</th><th style="text-align:center;">🟦</th><th style="text-align:center;">🟥</th></tr></thead><tbody>
+        ${cartoes.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="num">${p.yellow||0}</td><td class="num" style="color:var(--blue-card);">${p.blue||0}</td><td class="num" style="color:var(--danger);">${p.red||0}</td></tr>`).join('')}
+      </tbody></table>`
+  }</div>`;
+  return html;
+}
+function renderTimes(){
+  const teams = state.session.teams || [];
+  let html = `<div class="eyebrow">🎲 Times sorteados</div>`;
+  if(teams.length===0){
+    html += `<div class="empty"><span class="icon">🎲</span><div class="msg">Times ainda não foram sorteados.</div></div>`;
+    return html;
+  }
+  teams.forEach((team,i)=>{
+    html += `<div class="card">
+      <div class="row between" style="margin-bottom:8px;">
+        <span class="badge" style="background:${teamColorHex(i)}; color:#fff;">${teamColorName(i)}</span>
+        <span class="meta">${team.players.length} jogador(es)</span>
+      </div>`;
+    team.players.forEach(pid=>{
+      const p = getPlayer(pid); if(!p) return;
+      html += `<div class="row between" style="padding:4px 0;">
+        <div class="row">${overallBadge(p)}<div><div class="name">${p.position==='GOL'?'🧤 ':''}${escapeHtml(p.name)}</div><div class="meta">${p.position}</div></div></div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  return html;
+}
+function renderRodadas(){
+  const finalizadas = (state.session.matches||[]).filter(m=>m.finished);
+  let html = `<div class="eyebrow">📅 Rodadas</div>`;
+  if(finalizadas.length===0){
+    html += `<div class="empty"><span class="icon">📅</span><div class="msg">Nenhuma partida encerrada ainda.</div></div>`;
+    return html;
+  }
+  const numeros = [...new Set(finalizadas.map(m=>m.rodada||1))].sort((a,b)=>b-a);
+  numeros.forEach(num=>{
+    const jogos = finalizadas.filter(m=>(m.rodada||1)===num);
+    html += `<div class="card">
+      <div class="name" style="margin-bottom:8px;">Rodada ${num}</div>`;
+    jogos.forEach(m=>{
+      html += `<div class="scoreline">
+        <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+        <span style="font-family:'Rajdhani'; font-weight:700; font-size:17px;">${m.scoreA} × ${m.scoreB}</span>
+        <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  return html;
+}
+function renderElencoView(){
+  const list = state.players.slice().sort((a,b)=>b.level-a.level);
+  let html = `<div class="eyebrow">👥 Elenco <small>${list.length} jogador(es)</small></div>`;
+  if(list.length===0){
+    html += `<div class="empty"><span class="icon">👥</span><div class="msg">Nenhum jogador cadastrado ainda.</div></div>`;
+    return html;
+  }
+  list.forEach(p=>{
+    html += `<div class="card row between">
+      <div class="row">${overallBadge(p)}
+        <div>
+          <div class="name">${p.position==='GOL'?'🧤 ':''}${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
+          <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0}</div>
+          <div style="margin-top:4px;">${statusBadge(p.status)}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+  return html;
+}
+let simulacaoJogos = [];
+function renderStandingsTable(tabela){
+  return `<div style="overflow-x:auto;"><table class="rank" style="min-width:100%;">
+    <thead><tr><th>Time</th><th style="text-align:center;">J</th><th style="text-align:center;">V</th><th style="text-align:center;">E</th><th style="text-align:center;">D</th><th style="text-align:center;">GP</th><th style="text-align:center;">GC</th><th style="text-align:center;">SG</th><th style="text-align:center;">Pts</th></tr></thead>
+    <tbody>${tabela.map((t,i)=>`<tr>
+      <td><span class="pos ${i===0?'p1':i===1?'p2':i===2?'p3':''}" style="margin-right:5px;">${i+1}</span>${escapeHtml(t.nome)}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.j}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.v}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.e}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.d}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gp}</td>
+      <td class="num" style="color:var(--white); font-family:inherit; font-size:13px;">${t.gc}</td>
+      <td class="num" style="color:${t.sg>0?'var(--green-light)':t.sg<0?'var(--danger)':'var(--white)'}; font-family:inherit; font-size:13px;">${t.sg>0?'+':''}${t.sg}</td>
+      <td class="num" style="font-size:17px;">${t.pts}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+function computeStandingsComSimulacao(){
+  const teams = state.session.teams || [];
+  const tabela = teams.map((t,i)=>({nome:teamColorName(i), j:0, v:0, e:0, d:0, gp:0, gc:0, sg:0, pts:0}));
+  const finalizadas = (state.session.matches || []).filter(m=>m.finished);
+  finalizadas.concat(simulacaoJogos).forEach(m=>{
+    const A = tabela[m.teamA], B = tabela[m.teamB];
+    if(!A || !B) return;
+    A.j++; B.j++;
+    A.gp += m.scoreA; A.gc += m.scoreB;
+    B.gp += m.scoreB; B.gc += m.scoreA;
+    if(m.scoreA > m.scoreB){ A.v++; A.pts+=3; B.d++; }
+    else if(m.scoreB > m.scoreA){ B.v++; B.pts+=3; A.d++; }
+    else { A.e++; B.e++; A.pts+=1; B.pts+=1; }
+  });
+  tabela.forEach(t=> t.sg = t.gp - t.gc);
+  tabela.sort((a,b)=> b.pts-a.pts || b.sg-a.sg || b.gp-a.gp || a.nome.localeCompare(b.nome));
+  return tabela;
+}
+function renderSimulacao(){
+  const teams = state.session.teams || [];
+  let html = `<div class="eyebrow">🔮 Simulação de rodadas futuras</div>`;
+  html += `<div class="meta" style="margin-bottom:10px;">Monte cenários hipotéticos pra ver como o campeonato pode terminar. Isso é só seu, roda no seu celular — não é salvo em lugar nenhum e não muda a tabela oficial pra ninguém.</div>`;
+
+  if(teams.length<2){
+    html += `<div class="empty"><span class="icon">🎲</span><div class="msg">Times ainda não foram sorteados.</div></div>`;
+    return html;
+  }
+
+  html += `<div class="card">
+    <div class="row" style="gap:8px; margin-bottom:8px;">
+      <select id="simTeamA" style="flex:1; background:var(--card-2); border:1px solid var(--line); color:var(--white); border-radius:10px; padding:10px;">${teams.map((t,i)=>`<option value="${i}">${teamColorName(i)}</option>`).join('')}</select>
+      <select id="simTeamB" style="flex:1; background:var(--card-2); border:1px solid var(--line); color:var(--white); border-radius:10px; padding:10px;">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
+    </div>
+    <div class="row" style="gap:8px; margin-bottom:10px;">
+      <input type="text" id="simScoreA" placeholder="Placar A" style="flex:1; text-transform:none; text-align:center; letter-spacing:normal;" inputmode="numeric">
+      <input type="text" id="simScoreB" placeholder="Placar B" style="flex:1; text-transform:none; text-align:center; letter-spacing:normal;" inputmode="numeric">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="addSimulacao()">+ Adicionar ao cenário</button>
+  </div>`;
+
+  if(simulacaoJogos.length>0){
+    html += `<div class="eyebrow">Placares simulados <small>${simulacaoJogos.length} jogo(s)</small></div>`;
+    simulacaoJogos.forEach((m,idx)=>{
+      html += `<div class="card row between">
+        <span class="badge" style="background:${teamColorHex(m.teamA)}; color:#fff;">${teamColorName(m.teamA)}</span>
+        <span style="font-family:'Rajdhani'; font-weight:700; font-size:16px;">${m.scoreA} × ${m.scoreB}</span>
+        <span class="badge" style="background:${teamColorHex(m.teamB)}; color:#fff;">${teamColorName(m.teamB)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="removerSimulacao(${idx})">✕</button>
+      </div>`;
+    });
+    html += `<button class="btn btn-outline btn-block" style="margin-bottom:14px;" onclick="limparSimulacao()">🗑️ Limpar simulação</button>`;
+  }
+
+  html += `<div class="eyebrow">📊 Tabela simulada</div>`;
+  html += `<div class="card">${renderStandingsTable(computeStandingsComSimulacao())}</div>`;
+  html += `<div class="meta" style="text-align:center;">⚠️ Cenário fictício, só neste celular — a tabela oficial não muda.</div>`;
+  return html;
+}
+function addSimulacao(){
+  const a = parseInt(document.getElementById('simTeamA').value);
+  const b = parseInt(document.getElementById('simTeamB').value);
+  if(a===b){ alert('Escolha dois times diferentes.'); return; }
+  const scoreA = Math.max(0, parseInt(document.getElementById('simScoreA').value)||0);
+  const scoreB = Math.max(0, parseInt(document.getElementById('simScoreB').value)||0);
+  simulacaoJogos.push({teamA:a, teamB:b, scoreA, scoreB});
+  render();
+}
+function removerSimulacao(idx){
+  simulacaoJogos.splice(idx,1);
+  render();
+}
+function limparSimulacao(){
+  if(simulacaoJogos.length===0) return;
+  if(!confirm('Limpar todos os placares simulados?')) return;
+  simulacaoJogos = [];
+  render();
+}
+
+carregar();
+</script>
+</body>
+</html>
