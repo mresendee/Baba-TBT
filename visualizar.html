@@ -189,14 +189,12 @@ function render(){
     <button class="${aba==='ranking'?'on':''}" onclick="setAba('ranking')">🏆 Ranking</button>
     <button class="${aba==='times'?'on':''}" onclick="setAba('times')">🎲 Times</button>
     <button class="${aba==='rodadas'?'on':''}" onclick="setAba('rodadas')">📅 Rodadas</button>
-    <button class="${aba==='elenco'?'on':''}" onclick="setAba('elenco')">👥 Elenco</button>
     <button class="${aba==='simulacao'?'on':''}" onclick="setAba('simulacao')">🔮 Simular</button>
   </div>`;
 
   if(aba==='ranking') html += renderRanking();
   else if(aba==='times') html += renderTimes();
   else if(aba==='rodadas') html += renderRodadas();
-  else if(aba==='elenco') html += renderElencoView();
   else if(aba==='simulacao') html += renderSimulacao();
 
   html += `<div class="divider"></div><button class="btn btn-outline btn-block" onclick="carregar()">🔄 Atualizar</button>
@@ -319,26 +317,6 @@ function renderRodadas(){
       </div>`;
     });
     html += `</div>`;
-  });
-  return html;
-}
-function renderElencoView(){
-  const list = state.players.slice().sort((a,b)=>b.level-a.level);
-  let html = `<div class="eyebrow">👥 Elenco <small>${list.length} jogador(es)</small></div>`;
-  if(list.length===0){
-    html += `<div class="empty"><span class="icon">👥</span><div class="msg">Nenhum jogador cadastrado ainda.</div></div>`;
-    return html;
-  }
-  list.forEach(p=>{
-    html += `<div class="card row between">
-      <div class="row">${overallBadge(p)}
-        <div>
-          <div class="name">${p.position==='GOL'?'🧤 ':''}${escapeHtml(p.name)} ${p.guest?'<span class="badge badge-guest">CONVIDADO</span>':''}</div>
-          <div class="meta">${p.position} · ${p.matchesPlayed||0} jogos · ⚽${p.goals||0} 🎯${p.assists||0}</div>
-          <div style="margin-top:4px;">${statusBadge(p.status)}</div>
-        </div>
-      </div>
-    </div>`;
   });
   return html;
 }
