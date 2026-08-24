@@ -171,7 +171,7 @@ function generateCode(){
 /* ================= STATE ================= */
 let state = {
   players: [],
-  session: { date:'', checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 },
+  session: { date:'', checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1, rodadaFinal:null, finalistas:null },
   settings: { groupName:'Minha Pelada' },
   despesas: [],
   loaded:false
@@ -218,7 +218,9 @@ function mergeSessionData(data){
     matches: (incoming && incoming.matches) || [],
     teams: (incoming && incoming.teams) || [],
     grupos3: (incoming && incoming.grupos3) || [],
-    rodadaAtual: (incoming && incoming.rodadaAtual) || 1
+    rodadaAtual: (incoming && incoming.rodadaAtual) || 1,
+    rodadaFinal: (incoming && incoming.rodadaFinal) || null,
+    finalistas: (incoming && incoming.finalistas) || null
   };
   return isNewDay;
 }
@@ -234,7 +236,7 @@ async function loadAll(){
     console.error('Erro ao carregar dados', e);
     alert('Não consegui conectar ao servidor. Verifique sua internet e puxe a tela para atualizar.');
     state.players = []; state.settings = {groupName:'Minha Pelada'}; state.despesas = [];
-    state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1 };
+    state.session = { date: todayKey(), checkins:[], teams:[], matches:[], grupos3:[], rodadaAtual:1, rodadaFinal:null, finalistas:null };
   }
   state.loaded = true;
 }
@@ -1330,6 +1332,26 @@ async function comecarRodada(){
   await saveSession();
   render();
 }
+function rodadaLabel(num){
+  return (state.session.rodadaFinal && num===state.session.rodadaFinal) ? '🏆 Grande Final' : ('Rodada ' + num);
+}
+async function comecarGrandeFinal(){
+  if(getLiveMatch()){ alert('Encerre a partida ao vivo antes de avançar de rodada.'); return; }
+  const classificacao = computeStandings();
+  if(classificacao.length<2 || classificacao[0].j===0 || classificacao[1].j===0){
+    alert('Preciso de pelo menos 2 times com jogos encerrados na fase classificatória pra saber quem são o 1º e o 2º colocado.');
+    return;
+  }
+  const primeiro = classificacao[0], segundo = classificacao[1];
+  if(!confirm(`A Grande Final vai ser entre:\n\n🥇 ${primeiro.nome} (${primeiro.pts} pts)\n🥈 ${segundo.nome} (${segundo.pts} pts)\n\nConfirma?`)) return;
+  const novaRodada = (state.session.rodadaAtual || 1) + 1;
+  state.session.rodadaAtual = novaRodada;
+  state.session.rodadaFinal = novaRodada;
+  state.session.finalistas = { teamA: primeiro.idx, teamB: segundo.idx };
+  rodadaVisualizada = novaRodada;
+  await saveSession();
+  render();
+}
 async function corrigirNumeroRodada(){
   const atual = state.session.rodadaAtual || 1;
   const resposta = prompt('Corrigir o número da rodada atual.\n\nUse isso se o contador avançou errado (por exemplo, pulou rodadas que não aconteceram). Isso NÃO apaga nenhuma partida já jogada, só ajusta em qual rodada as novas partidas vão entrar a partir de agora.', atual);
@@ -1364,7 +1386,7 @@ function renderPartida(){
   html += `<div class="card row between" style="padding:10px 12px;">
     <button class="btn btn-ghost btn-sm" onclick="navegarRodada(-1)" ${rv<=1?'disabled':''}>◀</button>
     <div style="text-align:center;">
-      <div class="name">Rodada ${rv}</div>
+      <div class="name">${rodadaLabel(rv)}</div>
       <div class="meta">${statusLabel}</div>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="navegarRodada(1)">▶</button>
@@ -1376,11 +1398,14 @@ function renderPartida(){
     return html;
   }
   if(rv > rodadaReal){
-    html += `<div class="empty"><span class="icon">🗓️</span><div class="msg">A rodada ${rv} ainda não começou — será disputada em outro dia. Nada é salvo aqui até você começar ela de verdade.</div></div>`;
+    html += `<div class="empty"><span class="icon">🗓️</span><div class="msg">${rodadaLabel(rv)} ainda não começou — será disputada em outro dia. Nada é salvo aqui até você começar ela de verdade.</div></div>`;
     if(live){
-      html += `<div class="meta" style="text-align:center;">Encerre a partida ao vivo (na rodada ${rodadaReal}) antes de começar essa aqui.</div>`;
+      html += `<div class="meta" style="text-align:center;">Encerre a partida ao vivo (na ${rodadaLabel(rodadaReal)}) antes de começar essa aqui.</div>`;
+    } else if(!state.session.rodadaFinal){
+      html += `<button class="btn btn-primary btn-block" style="margin-bottom:8px;" onclick="comecarRodada()">🏁 Começar rodada ${rodadaReal+1}</button>`;
+      html += `<button class="btn btn-outline btn-block" onclick="comecarGrandeFinal()">🏆 Encerrar fase classificatória e ir pra Grande Final</button>`;
     } else {
-      html += `<button class="btn btn-primary btn-block" onclick="comecarRodada()">🏁 Começar rodada ${rodadaReal+1}</button>`;
+      html += `<div class="meta" style="text-align:center;">A Grande Final já foi definida — não dá pra criar rodadas depois dela.</div>`;
     }
     return html;
   }
@@ -1391,13 +1416,16 @@ function renderPartida(){
   }
 
   if(!live){
+    const finais = (state.session.rodadaFinal===rodadaReal) ? state.session.finalistas : null;
+    const teamASel = finais ? finais.teamA : 0;
+    const teamBSel = finais ? finais.teamB : 1;
     html += `<div class="card">
-      <label class="lbl">Times da partida</label>
+      <label class="lbl">${finais ? '🏆 Times da Grande Final (já selecionados pela classificação)' : 'Times da partida'}</label>
       <div class="grid2" style="margin-bottom:10px;">
-        <select id="selTeamA">${teams.map((t,i)=>`<option value="${i}">${teamColorName(i)}</option>`).join('')}</select>
-        <select id="selTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===1?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
+        <select id="selTeamA">${teams.map((t,i)=>`<option value="${i}" ${i===teamASel?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
+        <select id="selTeamB">${teams.map((t,i)=>`<option value="${i}" ${i===teamBSel?'selected':''}>${teamColorName(i)}</option>`).join('')}</select>
       </div>
-      <button class="btn btn-primary btn-block" onclick="startMatch()">Iniciar partida</button>
+      <button class="btn btn-primary btn-block" onclick="startMatch()">${finais ? '🏆 Iniciar a Grande Final' : 'Iniciar partida'}</button>
     </div>`;
   } else {
     html += renderScoreboard(live);
@@ -1406,7 +1434,7 @@ function renderPartida(){
 
   const jogosDaRodada = state.session.matches.filter(m=>m.finished && (m.rodada||1)===rodadaReal);
   if(jogosDaRodada.length>0){
-    html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas nesta rodada</div>`;
+    html += `<div class="eyebrow" style="margin-top:14px;">Partidas encerradas ${state.session.rodadaFinal===rodadaReal ? 'na final' : 'nesta rodada'}</div>`;
     html += renderDestaqueRodadaCard(jogosDaRodada);
     jogosDaRodada.forEach(m=> html += renderMatchSummaryCard(m));
     html += `<button class="btn btn-ghost btn-block btn-sm" onclick="compartilharRodada(${rodadaReal})">📤 Compartilhar rodada (imagem)</button>`;
@@ -1800,7 +1828,7 @@ function gerarImagemRodada(rodadaInfo){
 
   ctx.fillStyle = '#F5F6F7';
   ctx.font = 'bold 22px Arial, sans-serif';
-  ctx.fillText(`Rodada ${rodadaInfo.rodada}`, W/2, 82);
+  ctx.fillText(rodadaLabel(rodadaInfo.rodada), W/2, 82);
 
   ctx.fillStyle = '#8A8F98';
   ctx.font = '15px Arial, sans-serif';
@@ -1851,7 +1879,7 @@ async function compartilharRodada(rodadaNum){
   const rodadas = agruparPorRodada(state.session.matches);
   const r = rodadas.find(x=>x.rodada===rodadaNum);
   if(!r){ alert('Não encontrei essa rodada.'); return; }
-  await compartilharImagemGenerica(gerarImagemRodada(r), `rodada-${rodadaNum}.png`, `Rodada ${rodadaNum}`);
+  await compartilharImagemGenerica(gerarImagemRodada(r), `rodada-${rodadaNum}.png`, rodadaLabel(rodadaNum));
 }
 async function startMatch(){
   const a = parseInt(document.getElementById('selTeamA').value);
@@ -2255,11 +2283,11 @@ function renderRanking(){
   } else {
     html += rodadasComJogos.slice().reverse().map(r=>{
       const destaque = destaqueDaRodada(r.jogos);
-      if(!destaque) return `<div class="row between" style="padding:6px 0; border-top:1px solid var(--line);"><span class="meta">Rodada ${r.rodada}</span><span class="meta">sem destaque (sem gols/assistências)</span></div>`;
+      if(!destaque) return `<div class="row between" style="padding:6px 0; border-top:1px solid var(--line);"><span class="meta">${rodadaLabel(r.rodada)}</span><span class="meta">sem destaque (sem gols/assistências)</span></div>`;
       const p = getPlayer(destaque.playerId);
       if(!p) return '';
       return `<div class="row between" style="padding:6px 0; border-top:1px solid var(--line);">
-        <span class="meta">Rodada ${r.rodada}</span>
+        <span class="meta">${rodadaLabel(r.rodada)}</span>
         <span class="name" style="font-size:13px;">${escapeHtml(p.name)} <span class="meta">(${destaque.gols}⚽ ${destaque.assist}🎯)</span></span>
       </div>`;
     }).join('');

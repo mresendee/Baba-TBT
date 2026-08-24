@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pelada-pro-v36';
+const CACHE_NAME = 'pelada-pro-v37';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
